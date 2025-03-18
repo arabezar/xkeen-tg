@@ -80,7 +80,6 @@ fi
 if user_inactive; then
     show_info_user_deactivated
     if ask_user "❓ Активировать пользователя ${SSH_USER}?" "^[YyДд]+"; then
-        # if replace_shell $(get_create_rshell); then
         if limit_user; then
             show_info_user_activated
         else
@@ -91,7 +90,6 @@ if user_inactive; then
     fi
 # И ограничить права
 elif ! user_limited && ask_user "❓ Ограничить права пользователя ${SSH_USER}?" "^[YyДд]+"; then
-    # if replace_shell $(get_create_rshell); then
     if limit_user; then
         show_info_user_limited
     else
