@@ -1,6 +1,6 @@
 /.env
 /.vscode
-/create_release_server.sh
+/create_release_server.bat
 /README.md.add.later
 /sync_certs.sh
 /test.sh

@@ -98,10 +98,10 @@ elif ! user_limited && ask_user "❓ Ограничить права польз�
 fi
 
 # Создание ссылок на сертификат в домашней папке
-if [[ -d "${ACME_CERT_PATH}" ]]; then
-    create_link "cert.cer" "${ACME_CERT_PATH}/${DOMAIN}.cer"
-    create_link "cert.key" "${ACME_CERT_PATH}/${DOMAIN}.key"
-    create_link "fullchain.cer" "${ACME_CERT_PATH}/fullchain.cer"
+if [[ -d "${CERT_PATH}" ]]; then
+    create_link "cert.cer" "${CERT_PATH}/${DOMAIN}.cer"
+    create_link "cert.key" "${CERT_PATH}/${DOMAIN}.key"
+    create_link "fullchain.cer" "${CERT_PATH}/fullchain.cer"
 else
     show_error_no_cert_dir
 fi
