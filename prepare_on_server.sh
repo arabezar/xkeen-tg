@@ -5,14 +5,10 @@
 # функции-запросы
 is_production() { [ "${PROD_MODE}" = "true" ]; }
 is_synology() { uname -a | grep "synology" &>/dev/null; }
-user_get_info_syno()  { user_info=`synouser --get ${SSH_USER} 2>/dev/null`
-                        user_dir=`echo "${user_info}" | grep "User Dir" | sed -E 's/.+\[(.+)\]/\1/'`
-                        user_shell=`echo "${user_info}" | grep "User Shell" | sed -E 's/.+\[(.+)\]/\1/'`; }
-user_get_info_linux() { user_info=`grep -E "^${SSH_USER}" /etc/passwd`
-                        user_dir=`echo "${user_info}" | cut -d ':' -f 6`
-                        user_shell=`echo "${user_info}" | cut -d ':' -f 7`; }
-user_not_exists() { if is_synology; then user_get_info_syno; else user_get_info_linux; fi
-                    [ -z "${user_info}" ]; }
+user_get_info() { user_info=`grep -E "^${SSH_USER}" /etc/passwd`
+                  user_dir=`echo "${user_info}" | cut -d ':' -f 6`
+                  user_shell=`echo "${user_info}" | cut -d ':' -f 7`; }
+user_not_exists() { user_get_info; [ -z "${user_info}" ]; }
 user_inactive() { echo "${user_shell}" | grep -E "/nologin|/false" &>/dev/null; }
 user_limited() { echo "${user_shell}" | grep "/rbash" &>/dev/null; }
 replace_slash() { echo "$1" | sed 's/\//\\\//g'; }
