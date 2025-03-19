@@ -40,7 +40,7 @@
 - На сервере (откуда забирать сертификат). Например, адрес в локальной сети `192.168.1.234`
   - Находясь в домашней папке загрузить скрипт, подгружающий и запускающий последнюю версию скрипта установки:
     ```sh
-    curl -s -L https://github.com/arabezar/xkeen-tg/releases/latest/download/prepare_user.tar --output prepare_user.tar && tar -xvf prepare_user.tar &>/dev/null && rm prepare_user.tar && mv .env.sample.user .env && chmod ugo-x .env LICENSE
+    curl -s -L https://github.com/arabezar/xkeen-tg/releases/latest/download/prepare_user.tar --output prepare_user.tar && tar -xf prepare_user.tar && rm prepare_user.tar && if [ -f .env ]; then rm .env.sample.user; else mv .env.sample.user .env; fi && chmod ugo-x .env LICENSE
     ```
   - Заполнить параметры скрипта в `.env` (например, `vi .env` или `nano .ext`)
   - Запустить скрипт командой `sudo prepare_on_server.sh` (`sudo` требуется для создания нового пользователя с минимальными правами для доступа по SSH и изменения прав чтения для файлов сертификата). Все вышеперечисленные действия можно проделать вручную:
