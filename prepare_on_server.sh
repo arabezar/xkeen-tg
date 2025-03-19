@@ -19,7 +19,7 @@ replace_slash() { echo "$1" | sed 's/\//\\\//g'; }
 ask_user() { read -p "$1 : " -n 1 -r && echo; [[ $REPLY =~ $2 ]]; }
 
 # функции, изменяющие реальные данные в системе
-user_create_syno() { is_production && synouser --add "$SSH_USER" "$SSH_PASS" "User wants Let's Encrypt certificate" 0 0 &>/dev/null; }
+user_create_syno() { is_production && synouser --add "$SSH_USER" "$SSH_PASS" "User wants Let's Encrypt certificate" 0 "" 0 &>/dev/null; }
 user_create_linux() { is_production && useradd -m -p "$SSH_PASS" -c "User wants Let's Encrypt certificate" "$SSH_USER" &>/dev/null; }
 user_create() { if is_synology; then user_create_syno; else user_create_linux; fi; }
 replace_shell() { is_production && sed -i "/^${SSH_USER}/s/$(replace_slash ${user_shell})/$(replace_slash $1)/" /etc/passwd &>/dev/null; }
