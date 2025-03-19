@@ -3,7 +3,7 @@
 ![Github last commit](https://img.shields.io/github/last-commit/arabezar/xkeen-tg)
 [![GitHub Release](https://img.shields.io/github/release/arabezar/xkeen-tg?style=flat&color=green)](https://github.com/arabezar/xkeen-tg/releases)
 [![GitHub Stars](https://img.shields.io/github/stars/arabezar/xkeen-tg?style=flat)](https://github.com/arabezar/xkeen-tg/stargazers)
-[![License](https://img.shields.io/github/license/arabezar/xkeen-tg.svg?style=flat&color=orange)](LICENSE)
+[![License](https://img.shields.io/github/license/arabezar/xkeen-tg?style=flat&color=orange)](LICENSE)
 [![YooMoney](https://img.shields.io/badge/donate-YooMoney-8037fd.svg?style=flat)](https://yoomoney.ru/to/410013875426872)
 [![CloudTips](https://img.shields.io/badge/donate-CloudTips-598bd7.svg?style=flat)](https://pay.cloudtips.ru/p/6352cb45)
 
@@ -100,8 +100,8 @@
 
 ## Вклад
 
-Все идеи, пожелания и замечания категорически приветствуются как в разделах [Issues](https://github.com/arabezar/xkeen-tg/issues) и [Discussions](https://github.com/arabezar/xkeen-tg/discussions), так и в [чате](https://t.me/xkeen-tg).
+Все идеи, пожелания и замечания категорически приветствуются в разделах [Issues](https://github.com/arabezar/xkeen-tg/issues) и [Discussions](https://github.com/arabezar/xkeen-tg/discussions).
 
-## Поддержка
+---
 
 Нравится проект? Поддержи автора, купи ему :beers: или :coffee: ([тынц](https://yoomoney.ru/to/410013875426872) или [тынц](https://pay.cloudtips.ru/p/6352cb45))
