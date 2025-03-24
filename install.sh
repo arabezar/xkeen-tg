@@ -56,6 +56,7 @@ case "$_cmd" in
         check_config_param "Пароль пользователя" "SSH_PASS" "want4cert"
         check_config_param "Домен для сертификата" "DOMAIN"
         check_config_param "Путь к сертификатам" "CERT_PATH" "/usr/local/share/acme.sh/\${DOMAIN}_ecc"
+        echo "Параметры сохранены, создаём пользователя и настраиваем сертификат..."
 
         # назначение прав распакованным файлам
         chmod ugo-x .env
@@ -88,6 +89,7 @@ case "$_cmd" in
         fi
         check_config_param "Токен вашего бота Телеграм" "TELEGRAM_TOKEN"
         check_config_param "Список валидных пользователей (id через пробел)" "CHAT_IDS"
+        echo "Параметры сохранены, устанавливаем сервис..."
         
         # назначение прав распакованным файлам
         chmod ugo-x .env
