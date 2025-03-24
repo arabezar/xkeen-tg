@@ -1,8 +1,8 @@
 /.env
 /.vscode
-/create_release_server.bat
-/README.md.add.later
+/*.tar
+
+/xkeentg
 /sync_certs.sh
 /test.sh
-/xkeentg.sh
-/*.tar
+/README.md.add.later

@@ -3,14 +3,12 @@
 # Определение папку скрипта
 SCRIPT_PATH=$(cd `dirname $0` && pwd)
 
-# параметры скрипта
-. ${SCRIPT_PATH}/.env
+# Параметры скрипта
+. $SCRIPT_PATH/.env
 
 # функции-запросы
-is_production() { [ "${PROD_MODE}" = "true" ]; }
 is_synology() { uname -a | grep "synology" &>/dev/null; }
 ask_user() { read -p "$1 : " -n 1 -r && echo; [[ $REPLY =~ $2 ]]; }
-
 user_get_info() { user_info=`grep -E "^${SSH_USER}" /etc/passwd`
                   user_dir=`echo "${user_info}" | cut -d ':' -f 6`
                   user_shell=`echo "${user_info}" | cut -d ':' -f 7`; }
@@ -21,15 +19,15 @@ get_shell() { if is_synology; then echo "/bin/sh"; else echo "/bin/bash"; fi; }
 user_shell_ok() { echo "${user_shell}" | grep $(get_shell) &>/dev/null; }
 
 # функции, изменяющие реальные данные в системе
-user_create_syno() { is_production && synouser --add "$SSH_USER" "$SSH_PASS" "User wants Let's Encrypt certificate" 0 "" 0 &>/dev/null; }
-user_create_linux() { is_production && useradd -m -p "$SSH_PASS" -c "User wants Let's Encrypt certificate" "$SSH_USER" &>/dev/null; }
+user_create_syno() { synouser --add "$SSH_USER" "$SSH_PASS" "User wants Let's Encrypt certificate" 0 "" 0 &>/dev/null; }
+user_create_linux() { useradd -m -p "$SSH_PASS" -c "User wants Let's Encrypt certificate" "$SSH_USER" &>/dev/null; }
 user_create() { if is_synology; then user_create_syno; else user_create_linux; fi; }
-replace_shell() { is_production && sed -i "/^${SSH_USER}/s/$(replace_slash ${user_shell})/$(replace_slash $1)/" /etc/passwd &>/dev/null; }
+replace_shell() { sed -i "/^${SSH_USER}/s/$(replace_slash ${user_shell})/$(replace_slash $1)/" /etc/passwd &>/dev/null; }
 activate_user() { replace_shell $(get_shell); }
 create_link() { if [[ -L "${user_dir}/$1" ]]; then
                     show_info_cert_link_exists "$2"
                 elif  [[ -f "$2" ]]; then
-                    if is_production && ln -s "$2" "${user_dir}/$1" &>/dev/null; then
+                    if ln -s "$2" "${user_dir}/$1" &>/dev/null; then
                         chmod o+r "${user_dir}/$1" &>/dev/null
                         show_info_cert_linked "$2"
                     else show_error_cant_create_link "$2"; fi
