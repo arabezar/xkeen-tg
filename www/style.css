@@ -1,0 +1,62 @@
+html {
+    height: 97%;
+}
+
+body {
+    height: 100%;
+    background-color: #006655;
+    font-family: Verdana;
+}
+
+div#outer {
+    display: table;
+    height: 97%;
+    width: 100%;
+}
+
+div#container {
+    display: table-cell;
+    text-align: center;
+    vertical-align: middle;
+}
+
+div#bug {
+    font-size: 64px;
+    display: table-cell;
+    text-align: center;
+    vertical-align: middle;
+}
+
+h1 {
+    color: #003333;
+    font-size: 36pt;
+    font-weight: bold;
+    text-align: center;
+    margin: 0 auto;
+    padding: 0 0 20px 0;
+}
+
+p {
+	padding: 20px 0 30px 40px;
+	margin: 0 auto;
+	text-align: left;
+	width: 560px;
+	color: #003333;
+	font-size: 11pt;
+	font-weight: bold;
+}
+
+a#github-logo {
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    width: 150px;
+    height: 30px;
+    background-image: url('https://img.shields.io/badge/xkeen--tg-005544?style=flat&logo=github&logoColor=008877&label=GitHub&labelColor=003333');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center center;
+}
+a#github-logo:hover {
+    background-image: url('https://img.shields.io/badge/xkeen--tg-006655?style=flat&logo=github&logoColor=009988&label=GitHub&labelColor=004444');
+}

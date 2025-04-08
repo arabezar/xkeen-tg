@@ -1,8 +1,7 @@
 /.env
 /.vscode
 /*.tar
-
-/xkeentg
-/sync_certs.sh
+/30
+/4help
 /test.sh
-/README.md.add.later
+/xkeentg

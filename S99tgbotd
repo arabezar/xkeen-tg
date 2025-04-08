@@ -1,0 +1,10 @@
+#!/bin/sh
+
+ENABLED=yes
+PROCS=tgbotd
+ARGS=""
+PREARGS=""
+DESC=$PROCS
+PATH=/opt/bin:/opt/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+
+. /opt/etc/init.d/rc.func
