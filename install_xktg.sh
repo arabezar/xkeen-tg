@@ -1,6 +1,6 @@
 #!/bin/sh
 
-VERSION="0.1.3" # Версия скрипта
+VERSION="0.1.4" # Версия скрипта
 VERSIONS_XKEEN_SUPPORTED="1.1.3 1.1.3.1 1.1.3.2" # Поддерживаемые версии xkeen (через пробел)
 LATEST_RELEASE_URL="https://github.com/arabezar/xkeen-tg/releases/latest/download/xkeentg.tar"
 
@@ -65,7 +65,8 @@ check_config_param() {
         _value_ask="$_value_env"
     fi
 
-    do
+    local _value_new=""
+    while [ -z "$_value_new" ]; do
         # запрос параметра у пользователя
         if [ -n "$_value_ask" ]; then
             read -p "$_question [$_value_ask] (Enter - подтвердить): " _value_new
@@ -77,7 +78,6 @@ check_config_param() {
         if [ -z "$_value_new" ]; then
             _value_new="$_value_ask"
         fi
-    until [ -n "$_value_new" ]
     done
 
     export $_param="$_value_new"
@@ -253,15 +253,15 @@ mv -f S99tgbotd "$_initd_path"
 # mv -f xkeentg "$_bin_path"
 # xkeentg --install
 
-/opt/etc/init.d/S80lighttpd restart
-/opt/etc/init.d/S99tgbotd restart
+${_initd_path}/S80lighttpd restart
+${_initd_path}/S99tgbotd restart
 sleep 2
-/opt/etc/init.d/S80lighttpd status
+${_initd_path}/S80lighttpd status
 if [ $? -ne 0 ]; then
     echo "❌ Ошибка установки, проверьте конфигурацию lighttpd: ${_lighttpd_path}"
     exit 1
 fi
-/opt/etc/init.d/S99tgbotd status
+${_initd_path}/S99tgbotd status
 if [ $? -ne 0 ]; then
     echo "❌ Ошибка установки, проверьте конфигурацию xkeen-tg: ${_xkeentg_path}"
     exit 2
