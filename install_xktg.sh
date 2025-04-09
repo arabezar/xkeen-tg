@@ -151,9 +151,9 @@ if [[ ! -f "$CERT_PATH/host.pem" || "$_cmd" == "$_cmd_renew" ]]; then
         CERT_STATE=""
         CERT_CITY=""
     fi
-    check_config_param "Код страны" "CERT_COUNTRY" "${_country}"
-    check_config_param "Регион или область" "CERT_STATE" "${_state}"
-    check_config_param "Город" "CERT_CITY" "${_city}"
+    check_config_param "Код страны" "CERT_COUNTRY" "${_geo_country}"
+    check_config_param "Регион или область" "CERT_STATE" "${_geo_state}"
+    check_config_param "Город" "CERT_CITY" "${_geo_city}"
     check_config_param "Организация" "CERT_ORG" "Home"
     check_config_param "Подразделение" "CERT_ORG_UNIT" "IT"
     check_config_param "Домен для сертификата" "DOMAIN"
