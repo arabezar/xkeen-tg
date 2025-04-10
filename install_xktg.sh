@@ -191,7 +191,7 @@ if [[ ! -f "$CERT_PATH/host.pem" || "$_cmd" == "$_cmd_renew" ]]; then
         -keyout "${CERT_PATH}/host.key" \
         -out "${CERT_PATH}/host.crt" \
         -subj "${_csr_info}" &>/dev/null
-    cat "${CERT_PATH}/host.key" "${CERT_PATH}/host.crt" > "${CERT_PATH}/host.pem" &>/dev/null
+    cat "${CERT_PATH}/host.key" "${CERT_PATH}/host.crt" > "${CERT_PATH}/host.pem"
     chmod 400 "${CERT_PATH}/host.key" "${CERT_PATH}/host.crt" "${CERT_PATH}/host.pem" &>/dev/null
 fi
 
