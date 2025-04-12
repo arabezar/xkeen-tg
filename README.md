@@ -243,8 +243,8 @@ root@router:~/xkeentg$
       echo "$_some_var"
   }
   ```
-  >[!TIP]
-  > Файл как минимум должен содержать указанные структуры (переменную `cmd_description` и функции `cmd_help` и `cmd_run`), пусть даже пустые. Делитесь идеями и командами в [Discussions](https://github.com/arabezar/xkeen-tg/discussions/categories/ideas)
+> [!TIP]
+> Файл команды как минимум должен содержать указанные структуры (переменную `cmd_description` и функции `cmd_help` и `cmd_run`), пусть даже пустые. Делитесь идеями и командами в [Discussions](https://github.com/arabezar/xkeen-tg/discussions/categories/ideas)
 
 ## Вклад
 
