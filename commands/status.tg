@@ -1,0 +1,14 @@
+cmd_description="Показать статус роутера"
+
+cmd_help() {
+    local _cmd="$1"
+    echo "$_cmd                  - показать статус роутера и службы (статус, текущая и последняя версии xkeen, текущая и последняя версии xray, версии баз данных, внешние IP-адреса роутера)"
+}
+
+cmd_run() {
+    local _uptime=$(uptime)
+    local _days=$(echo "$_uptime" | xargs |cut -d' ' -f3)
+    local _load=$(echo "$_uptime" | awk -F'load average:' '{print $2}')
+    echo "Роутер работает $_days дней"
+    echo "Текущая загрузка: $_load"
+}

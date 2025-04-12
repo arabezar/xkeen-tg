@@ -1,11 +1,10 @@
 #!/bin/bash
 
 tar -czf xkeentg.tar \
-    LICENSE \
-    README.md \
+    tools/* \
+    services/* \
+    commands/* \
     www/* \
-    tgbotd \
-    S99tgbotd \
-    ip2geo.sh \
-    ip2geo_test.sh
+    README.md \
+    LICENSE
     

@@ -1,0 +1,101 @@
+#!/bin/sh
+
+VERSION="1.0.1" # Версия скрипта
+TOOL_NAME="xkeen-tg"
+DAEMON_NAME="tgbotd"
+DAEMON_START_NAME="S99${DAEMON_NAME}"
+
+ACTION="$1"
+
+SELF_NAME=$(echo "$0" | rev | cut -d/ -f1 | rev)
+BIN_PATH="/opt/sbin"
+ETC_PATH="/opt/etc"
+INITD_PATH="${ETC_PATH}/init.d"
+XKEENTG_PATH="${BIN_PATH}/.xkeentg"
+ENV_FILE="${XKEENTG_PATH}/.env"
+
+. "$ENV_FILE"
+
+tg_count() { ps | grep -v $SELF_NAME | grep $DAEMON_NAME | grep -v grep | wc -l; }
+nc_count() { netstat -tulpn 2>/dev/null | grep ":$TG_LOCAL_PORT " | wc -l; }
+
+svc_status() {
+    local _tg_cnt=$(tg_count)
+    local _nc_cnt=$(nc_count)
+
+    [ $(($_tg_cnt + $_nc_cnt)) -ge 2 ] && return 0 || [ $_nc_cnt -ge 1 ] && return 1 || [ $_tg_cnt -ge 1 ] && return 2 || return 3
+}
+
+# тестовая функция, в модуле не используется
+svc_test() {
+    svc_status
+    case $? in
+        0)    echo "alive" ;;
+        1)    echo "port busy" ;;
+        2)    echo "bot with no port?" ;;
+        3)    echo "dead" ;;
+        *)    echo "mission impossible" ;;
+    esac
+}
+
+tg_command() {
+    local _cmd=$1
+    local _content=$2
+    curl -s -X POST https://api.telegram.org/bot${TG_TOKEN}/${_cmd} \
+        -H "Content-Type: application/json" \
+        -d "$_content" &>/dev/null
+}
+
+case "$ACTION" in
+    --start)    $INITD_PATH/$DAEMON_START_NAME start;   exit $? ;;
+    --stop)     $INITD_PATH/$DAEMON_START_NAME stop;    exit $? ;;
+    --restart)  $INITD_PATH/$DAEMON_START_NAME restart; exit $? ;;
+    --status)   $INITD_PATH/$DAEMON_START_NAME status;  exit $? ;;
+
+    --version)
+        echo "${TOOL_NAME} v${VERSION}"
+        ;;
+        
+    --test)
+        echo "== ps ($DAEMON_NAME):"
+        ps | grep $DAEMON_NAME | grep -v grep | sed 's/^\s*//' | cut -d' ' -f1
+        echo "== netstat (nc@$TG_LOCAL_PORT):"
+        netstat -tulpn 2>/dev/null | grep ":$TG_LOCAL_PORT " | xargs | rev | cut -d' ' -f1 | rev | cut -d/ -f1
+        echo "== статус службы: $(svc_test)"
+        ;;
+
+    --clean)
+		kill $(ps | grep "$DAEMON_NAME" | grep -v grep | sed 's/^\s*//' | cut -d' ' -f1 | xargs) &>/dev/null
+		kill $(netstat -tulpn 2>/dev/null | grep ":$TG_LOCAL_PORT " | xargs | rev | cut -d' ' -f1 | rev | cut -d/ -f1) &>/dev/null
+        ;;
+
+    --renew-telegram-commands)
+        _commands="{ \"commands\": [ "
+        _i=0
+        _comma=""
+        for _filepath in $XKEENTG_PATH/*.tg; do
+            . $XKEENTG_PATH/tg_null_cmd
+            . $_filepath
+            _filename=${_filepath##*/}
+            _i=$(($_i + 1))
+            [ "$_i" -gt 1 ] && _comma=", "
+            _commands="${_commands}${_comma}{\"command\": \"${_filename%.tg}\", \"description\": \"${cmd_description}\"}"
+        done
+        _commands="${_commands} ] }"
+        tg_command "setMyCommands" "$_commands"
+        ;;
+
+    *)
+        echo "Использование: $0 command"
+        echo "  основные команды:"
+        echo "    --start       - запуск"
+        echo "    --stop        - останов"
+        echo "    --restart     - перезапуск"
+        echo "    --status      - состояние"
+        echo "    --version     - версия"
+        echo "  вспомогательные команды:"
+        echo "    --test        - информация о запущенных процессах"
+        echo "    --clean       - избавление от проблем (только в случае проблем со службами)"
+        echo "    --renew-telegram-commands     - обновить команды Телеграм"
+        ;;
+esac

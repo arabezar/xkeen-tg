@@ -1,0 +1,118 @@
+#!/bin/sh
+
+# Определение папки скрипта и зависящих от неё параметров
+SCRIPT_PATH=$(cd "$(dirname $0)" && pwd)
+XKEENTG_PATH="${SCRIPT_PATH}/.xkeentg"
+ENV_FILE="${XKEENTG_PATH}/.env"
+
+# Загрузка параметров
+if [ -f "$ENV_FILE" ]; then
+    . "$ENV_FILE"
+else
+    echo "Файл конфигурации ${ENV_FILE} не найден, запуск невозможен"
+    exit 255
+fi
+
+# Логи
+LOG_PATH="/opt/var/log/tgbotd"
+LOG_FILE_MSG="${LOG_PATH}/msg.log"
+LOG_FILE_MSG_ILLEGAL="${LOG_PATH}/msg_illegal.log"
+LOG_FILE_MSG_ERROR="${LOG_PATH}/msg_error.log"
+
+# LOG_FILE_DEBUG="${LOG_PATH}/debug.log"
+LOG_FILE_POST="${LOG_PATH}/post.log"
+LOG_FILE_GET="${LOG_PATH}/get.log"
+LOG_FILE_UNKNOWN="${LOG_PATH}/unknown.log"
+
+mkdir -p "$LOG_PATH"
+RESPONSE="HTTP/1.1 200 OK\r\nContent-Length: 0\nContent-Type: text/html\n\n"
+
+log() {
+    local _log_file="$1"
+    local _msg="$2"
+    echo -e "$(date +"%Y-%m-%d %T") - ${_msg}" >> "$_log_file"
+}
+
+send_message() {
+    local _msg="$1"
+    local _user_id="$2"
+    if [ -z "$_user_id" ]; then
+        _user_id="$_chat_id"
+    fi
+    curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendMessage?chat_id=${_user_id}&text=${_msg// /%20}" &>/dev/null
+}
+
+# Бесконечный цикл для обработки входящих сообщений
+while true; do
+    _request=$(echo -e "$RESPONSE" | nc -l -p $TG_LOCAL_PORT )
+    if ! echo "$_request" | head -n1 | grep -qE "^[a-zA-Z]+\s+/${TG_TOKEN}"; then
+        # binary file
+        echo "$request" > "${LOG_PATH}/binary-$(date +"%Y%m%d-%H%M%S").log"
+        sleep 2
+        continue
+    fi
+
+    _ip=$(echo "$_request" | grep -i 'X-Forwarded-For: ' | tr -d '\r')
+    _ua=$(echo "$_request" | grep -i 'user-agent: ' | tr -d '\r')
+    if echo "$_request" | head -n1 | grep -qiE "^GET\s+"; then
+        # get
+        log "$LOG_FILE_GET" "${_ip//X-Forwarded-For: /} ${_ua//user-agent: /}"
+        continue
+    fi
+    if ! echo "$_request" | head -n1 | grep -qE "^POST\s+"; then
+        # not post
+        log "$LOG_FILE_UNKNOWN" "${_ip//X-Forwarded-For: /} ${_ua//user-agent: /}"
+        continue
+    fi
+
+    _json=$(echo "$_request" | sed "/{/!d")
+    if [ -z "$_json" ]; then
+        # post without json
+        log "$LOG_FILE_POST" "${_ip//X-Forwarded-For: /} ${_ua//user-agent: /}"
+        continue
+    fi
+
+    # разбор json
+    _log_msg=$(echo "$_json" | jq -c '.')
+    # echo -e "$_request\n\n$_log_msg" > "${LOG_PATH}/test-$(date +"%Y%m%d-%H%M%S").log"
+    if [ $? -ne 0 ]; then
+        log "$LOG_FILE_MSG_ERROR" "${_ip//X-Forwarded-For: /} - Ошибка парсинга json\n${_request}"
+        continue
+    fi
+
+    _chat_id=$(echo "$_json" | jq -r '.message.chat.id')
+    _text=$(echo "$_json" | jq -r '.message.text')
+    if [[ "$_chat_id" == "null" ]]; then
+        log "$LOG_FILE_MSG_ERROR" "${_ip//X-Forwarded-For: /} - Пользователь не найден\n${_request}"
+        continue
+    fi
+
+    if [[ "$TG_CHAT_IDS" != *"$_chat_id"* ]]; then
+        # Проверка нелегалов, не прописанных в конфиге
+        log "$LOG_FILE_MSG_ILLEGAL" "${_ip//X-Forwarded-For: /} - $_log_msg"
+        # _reply="Вы не зарегистрированы в системе, обратитесь к администратору"
+        # send_message "$_reply"
+        continue
+    else
+        log "$LOG_FILE_MSG" "${_ip//X-Forwarded-For: /} - $_log_msg"
+    fi
+
+    # Парсинг текста сообщения - команды
+    if [ -f "${XKEENTG_PATH}${_text}.tg" ]; then
+        . "${XKEENTG_PATH}${_text}.tg"
+        _reply=$(cmd_run "$_text")
+    else
+        _commands="Команды:"
+        for _filepath in $XKEENTG_PATH/*.tg; do
+            . $XKEENTG_PATH/tg_null_cmd
+            . $_filepath
+            _filename=${_filepath##*/}
+            _commands="${_commands}\n$(cmd_help "/${_filename%.tg}")"
+        done
+        _reply=$(echo -e "$_commands")
+    fi
+
+    # Отправляем ответ в Telegram
+    echo -e "\t${_reply}" >> "$LOG_FILE_MSG"
+    send_message "$_reply"
+done

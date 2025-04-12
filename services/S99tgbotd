@@ -1,0 +1,124 @@
+#!/bin/sh
+
+# Информация о службе
+# Краткое описание: Запуск / Остановка tgbotd
+# Версия: 1.0.1
+
+ACTION=$1
+
+DAEMON_NAME="tgbotd"
+BIN_PATH="/opt/sbin"
+LOG_PATH="/opt/var/log"
+
+SELF_NAME=$(echo "$0" | rev | cut -d/ -f1 | rev)
+BOT_PATH="${BIN_PATH}/${DAEMON_NAME}"
+LOG_FILE="${LOG_PATH}/${DAEMON_NAME}/${DAEMON_NAME}.log"
+
+# Загрузка параметров
+ENV_FILE="${BIN_PATH}/.xkeentg/.env"
+[ -f "$ENV_FILE" ] && . "$ENV_FILE" &>/dev/null
+[ -z "$TG_LOCAL_PORT" ] && echo "Env TG_LOCAL_PORT is not set. Exiting" && exit 255
+
+ansi_red="\033[1;31m";
+ansi_white="\033[1;37m";
+ansi_green="\033[1;32m";
+ansi_yellow="\033[1;33m";
+ansi_std="\033[m";
+
+tg_count() { ps | grep -v $SELF_NAME | grep $DAEMON_NAME | grep -v grep | wc -l; }
+nc_count() { netstat -tulpn 2>/dev/null | grep ":$TG_LOCAL_PORT " | wc -l; }
+
+svc_status() {
+    local _tg_cnt=$(tg_count)
+    local _nc_cnt=$(nc_count)
+
+    [ $(($_tg_cnt + $_nc_cnt)) -ge 2 ] && return 0 || [ $_nc_cnt -ge 1 ] && return 1 || [ $_tg_cnt -ge 1 ] && return 2 || return 3
+}
+
+# тестовая функция, в модуле не используется
+svc_test() {
+    svc_status
+    case $? in
+        0)    echo "alive" ;;
+        1)    echo "port busy" ;;
+        2)    echo "bot with no port?" ;;
+        3)    echo "dead" ;;
+        *)    echo "mission impossible" ;;
+    esac
+}
+
+start() {
+    echo -e -n "$ansi_white Starting $DAEMON_NAME... $ansi_std"
+    svc_status
+    case $? in
+        0)
+            echo -e "            $ansi_yellow already running. $ansi_std"
+            return 0
+            ;;
+        1)
+            echo -e "            $ansi_red port is busy. $ansi_std"
+            return 1
+            ;;
+        2)
+            echo -e "            $ansi_red bot with no port. $ansi_std"
+            return 2
+            ;;
+    esac
+
+    "$BOT_PATH" >> "$LOG_FILE" 2>&1 &
+
+    echo -e "            $ansi_green done. $ansi_std"
+    echo "$(date +"%Y-%m-%d %H:%M:%S") starting" >> "$LOG_FILE"
+    logger "Started $DAEMON_NAME."
+    return 0
+}
+
+stop() {
+    echo -e -n "$ansi_white Shutting down $DAEMON_NAME... $ansi_std"
+    svc_status
+    case $? in
+        3)
+            echo -e "            $ansi_red not running. $ansi_std"
+            return 3
+            ;;
+        *)
+            kill $(ps | grep -v $SELF_NAME | grep "$DAEMON_NAME" | grep -v grep | sed 's/^\s*//' | cut -d' ' -f1 | xargs) &>/dev/null
+            kill $(netstat -tulpn 2>/dev/null | grep ":$TG_LOCAL_PORT " | xargs | rev | cut -d' ' -f1 | rev | cut -d/ -f1) &>/dev/null
+
+            echo -e "            $ansi_green done. $ansi_std"
+            echo "$(date +"%Y-%m-%d %H:%M:%S") stopped" >> "$LOG_FILE"
+            logger "Stopped $DAEMON_NAME."
+            return 0
+            ;;
+    esac
+}
+
+check() {
+    echo -e -n "$ansi_white Checking $DAEMON_NAME... $ansi_std"
+    svc_status
+    case $? in
+        0)
+            echo -e "            $ansi_green alive. $ansi_std"
+            return 0
+            ;;
+        3)
+            echo -e "            $ansi_red dead. $ansi_std";
+            return 3
+            ;;
+        *)
+            echo -e "            $ansi_red misfit. $ansi_std";
+            return 4
+            ;;
+    esac
+}
+
+case "$ACTION" in
+    start) start ;;
+    stop | kill) stop ;;
+    restart) check > /dev/null && stop; start ;;
+    check | status) check ;;
+    *)
+        echo -e "$ansi_white Usage: $0 (start|stop|restart|check|status|kill)$ansi_std"
+        exit 255
+        ;;
+esac

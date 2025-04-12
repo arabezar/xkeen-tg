@@ -1,11 +1,24 @@
 #!/bin/sh
 
-VERSION="0.1.4" # Версия скрипта
+VERSION="1.0.1" # Версия скрипта
 VERSIONS_XKEEN_SUPPORTED="1.1.3 1.1.3.1 1.1.3.2" # Поддерживаемые версии xkeen (через пробел)
 LATEST_RELEASE_URL="https://github.com/arabezar/xkeen-tg/releases/latest/download/xkeentg.tar"
+DAEMON_NAME="tgbotd"
+DAEMON_START_NAME="S99${DAEMON_NAME}"
 
-_cmd="$1"
-_cmd_renew="--renew"
+ACTION="$1"
+ACTION_RENEW="--renew"
+
+BIN_PATH="/opt/sbin"
+ETC_PATH="/opt/etc"
+WWW_PATH="/opt/share/www"
+CERT_PATH="${ETC_PATH}/tg"
+INITD_PATH="${ETC_PATH}/init.d"
+LIGHTTPD_PATH="${ETC_PATH}/lighttpd/conf.d"
+XKEENTG_PATH="${BIN_PATH}/.xkeentg"
+ENV_FILE="${XKEENTG_PATH}/.env"
+
+[ -f "$ENV_FILE" ] && . "$ENV_FILE"
 
 # Функция получения подстроки по regexp
 get_match() {
@@ -47,7 +60,7 @@ check_xkeen_version
 echo "Загрузка и распаковка xkeen-tg..."
 curl -sLO "$LATEST_RELEASE_URL"
 tar -xf xkeentg.tar
-chmod +x tgbotd S99tgbotd ip2geo.sh ip2geo_test.sh
+chmod +x services/* tools/* commands/*
 chmod -x www/* LICENSE README.md
 rm -f xkeentg.tar
 
@@ -60,7 +73,7 @@ check_config_param() {
 
     # локальные переменные
     local _value_ask="$_value_def"
-    local _value_env=$(sed -nE "s/^${_param}=(\\\"?)(.*)\1.*/\2/p" "$_env" 2>/dev/null)
+    local _value_env=$(sed -nE "s/^${_param}=(\\\"?)(.*)\1.*/\2/p" "$ENV_FILE" 2>/dev/null)
     if [ -n "$_value_env" ]; then
         _value_ask="$_value_env"
     fi
@@ -85,9 +98,9 @@ check_config_param() {
     # сохранение значения параметра
     if [[ "$_value_new" != "$_value_env" ]]; then
         if [ -n "$_value_env" ]; then
-            sed -i "s/^$_param=.*/$_param=\"$_value_new\"/" "$_env"
+            sed -i "s/^$_param=.*/$_param=\"$_value_new\"/" "$ENV_FILE"
         else
-            echo "$_param=\"$_value_new\"" >> "$_env"
+            echo "$_param=\"$_value_new\"" >> "$ENV_FILE"
         fi
     fi
 }
@@ -102,6 +115,7 @@ get_external_ip() {
     if [ -z "$_ip_external" ]; then
         _ip_external="$(ip r g 1.1.1.1 | xargs | rev | cut -d' ' -f1 | rev)"
         if [ -z "$_ip_external" ]; then
+            # получение IP-адреса: ifconfig.me или api.ipify.org
             _ip_external="$(curl -s ifconfig.me)"
             if [ $? -ne 0 -o -z "$_ip_external" ]; then
                 echo "❌ Ошибка получения внешнего IP-адреса"
@@ -128,25 +142,14 @@ get_internal_ip() {
     echo "$_ip_internal"
 }
 
-_bin_path="/opt/sbin"
-_etc_path="/opt/etc"
-_www_path="/opt/share/www"
-_cert_path="${_etc_path}/tg"
-_initd_path="${_etc_path}/init.d"
-_lighttpd_path="${_etc_path}/lighttpd/conf.d"
-_xkeentg_path="${_bin_path}/.xkeentg"
-_env="${_xkeentg_path}/.env"
-
-[ -f "$_env" ] && . "$_env"
-
 # заполнение файла .env
 echo "Сбор параметров для установки..."
-mkdir -p "$_xkeentg_path"
+mkdir -p "$XKEENTG_PATH"
 
-if [[ ! -f "$CERT_PATH/host.pem" || "$_cmd" == "$_cmd_renew" ]]; then
-    . "./ip2geo.sh"
+if [[ ! -f "$CERT_PATH/host.pem" || "$ACTION" == "$ACTION_RENEW" ]]; then
+    . "./tools/ip2geo.sh"
     get_geo_info
-    if [[ "$_cmd" == "$_cmd_renew" ]]; then
+    if [[ "$ACTION" == "$ACTION_RENEW" ]]; then
         CERT_COUNTRY=""
         CERT_STATE=""
         CERT_CITY=""
@@ -157,7 +160,7 @@ if [[ ! -f "$CERT_PATH/host.pem" || "$_cmd" == "$_cmd_renew" ]]; then
     check_config_param "Организация" "CERT_ORG" "Home"
     check_config_param "Подразделение" "CERT_ORG_UNIT" "IT"
     check_config_param "Домен для сертификата" "DOMAIN"
-    check_config_param "Путь к сертификатам" "CERT_PATH" "$_cert_path"
+    check_config_param "Путь к сертификатам" "CERT_PATH" "$CERT_PATH"
 fi
 check_config_param "Токен вашего бота Телеграм" "TG_TOKEN"
 check_config_param "Список валидных пользователей (id через пробел)" "TG_CHAT_IDS"
@@ -166,7 +169,7 @@ check_config_param "Порт для работы бота Телеграм" "TG_
 check_config_param "Внешний ip-адрес роутера" "ROUTER_IP_EXTERNAL" "$(get_external_ip)"
 check_config_param "Внутренний ip-адрес роутера" "ROUTER_IP_INTERNAL" "$(get_internal_ip)"
 
-chmod ugo-x "$_env"
+chmod ugo-x "$ENV_FILE"
 
 # обновление Entware
 echo "Обновление Entware..."
@@ -179,7 +182,7 @@ echo "Установка необходимых пакетов (openssl-util, li
 # создание сертификата
 opkg install openssl-util &>/dev/null
 mkdir -p "$CERT_PATH"
-if [[ ! -f "$CERT_PATH/host.pem" || "$_cmd" == "$_cmd_renew" ]]; then
+if [[ ! -f "$CERT_PATH/host.pem" || "$ACTION" == "$ACTION_RENEW" ]]; then
     _csr_info="/C=${CERT_COUNTRY}/ST=${CERT_STATE}/L=${CERT_CITY}/O=${CERT_ORG}/OU=${CERT_OU}/CN=${DOMAIN}"
     echo "Выпуск сертификата (CSR: ${_csr_info})..."
     openssl req \
@@ -205,14 +208,14 @@ opkg install lighttpd-mod-rewrite &>/dev/null
 opkg install netcat &>/dev/null
 
 echo "Настройка модулей web-сервера..."
-find "$_lighttpd_path" -regex "^${_lighttpd_path}/[0-9]+-tg.conf$" -exec rm -f {} \;
-_num_max=$(find ${_lighttpd_path} -type f -name "*.conf" -exec basename {} \; | grep -o "^[0-9]\+" | sort -nr | head -n 1)
+find "$LIGHTTPD_PATH" -regex "^${LIGHTTPD_PATH}/[0-9]+-tg.conf$" -exec rm -f {} \;
+_num_max=$(find ${LIGHTTPD_PATH} -type f -name "*.conf" -exec basename {} \; | grep -o "^[0-9]\+" | sort -nr | head -n 1)
 if [ -n "$_num_max" ]; then
     _num_max=$(($_num_max + 5))
 else
     _num_max=99
 fi
-_file_conf="${_lighttpd_path}/${_num_max}-tg.conf"
+_file_conf="${LIGHTTPD_PATH}/${_num_max}-tg.conf"
 
 cat > "$_file_conf" <<EOF
 # WARINNG: this file is auto-generated by xkeen-tg install.sh
@@ -231,59 +234,75 @@ ssl.pemfile = "${CERT_PATH}/host.pem"
 \$HTTP["host"] == "${DOMAIN}" {
     \$HTTP["url"] =~ "^/${TG_TOKEN}$" {
         proxy.server = ( "" => ( ( "host" => "127.0.0.1", "port" => ${TG_LOCAL_PORT} ) ) )
-    }
-    else {
-        url.rewrite = ( ".*" => "/none.html" )
+    } else {
+        \$HTTP["url"] !~ "^/(style\.css|favicon\.ico)$" {
+            url.rewrite-once = ( ".*" => "/none.html" )
+        }
     }
 }
 
 \$HTTP["host"] == "${ROUTER_IP_INTERNAL}" {
-    index-file.names = ( "index.html" )
-
-    \$HTTP["url"] !~ "^/style\.css$" {
+    \$HTTP["url"] == "/" {
+        url.rewrite-if-not-file = ( ".*" => "/index.html" )
+    } else \$HTTP["url"] !~ "^/(style\.css|favicon\.ico)$" {
         url.rewrite-if-not-file = ( ".*" => "/none.html" )
     }
 }
 EOF
 
 # установка сервиса
-mv -f www/* "$_www_path"
-mv -f tgbotd "$_bin_path"
-mv -f S99tgbotd "$_initd_path"
-# mv -f xkeentg "$_bin_path"
-# xkeentg --install
+mv -f www/* "$WWW_PATH"
+mv -f services/${DAEMON_NAME} "$BIN_PATH"
+mv -f services/${DAEMON_START_NAME} "$INITD_PATH"
+mv -f services/xkeentg "$BIN_PATH"
+mv -f commands/* "$XKEENTG_PATH"
 
-${_initd_path}/S80lighttpd restart
-${_initd_path}/S99tgbotd restart
+${INITD_PATH}/S80lighttpd restart
+${INITD_PATH}/${DAEMON_START_NAME} restart
 sleep 2
-${_initd_path}/S80lighttpd status
+${INITD_PATH}/S80lighttpd status
 if [ $? -ne 0 ]; then
-    echo "❌ Ошибка установки, проверьте конфигурацию lighttpd: ${_lighttpd_path}"
+    echo "❌ Ошибка установки, проверьте конфигурацию lighttpd: ${LIGHTTPD_PATH}"
     exit 1
 fi
-${_initd_path}/S99tgbotd status
+${INITD_PATH}/${DAEMON_START_NAME} status
 if [ $? -ne 0 ]; then
-    echo "❌ Ошибка установки, проверьте конфигурацию xkeen-tg: ${_xkeentg_path}"
+    echo "❌ Ошибка установки, проверьте конфигурацию xkeen-tg: ${XKEENTG_PATH}"
     exit 2
 fi
 
 _json=$(curl -s "https://api.telegram.org/bot${TG_TOKEN}/getWebhookInfo")
 _ok=$(echo "$_json" | jq -r '.ok')
-if [[ "$_ok" != "true" || "$_cmd" == "$_cmd_renew" ]]; then
-    echo "Регистрация webhook в Телеграме..."
-    # получение IP-адреса: api.ipify.org или ifconfig.me
-    _json=$(curl -s \
-                 -F "url=https://${DOMAIN}:${TG_WEBHOOK_PORT}/${TG_TOKEN}" \
-                 -F "ip_address=${ROUTER_IP_EXTERNAL}" \
-                 -F "certificate=@${CERT_PATH}/host.crt" \
-                    "https://api.telegram.org/bot${TG_TOKEN}/setWebhook")
-
-    _ok=$(echo "$_json" | jq -r '.ok')
+if [[ "$_ok" != "true" ]]; then
     _descr=$(echo "$_json" | jq -r '.description')
-    if [[ "$_ok" != "true" ]]; then
-        echo "❌ Ошибка регистрации webhook: ${_descr}"
-        exit 3
+    echo "❌ Ошибка получения информации о webhook в Телеграме: ${_descr}"
+    exit 3
+else
+    echo "Регистрация webhook в Телеграме..."
+    _url=$(echo "$_json" | jq -r '.result.url')
+    if [[ "$ACTION" == "$ACTION_RENEW" || -z "$_url" ]]; then
+        _tg_reg="true"
+    elif [[ "$_url" != "" && "$_url" != "https://${DOMAIN}:${TG_WEBHOOK_PORT}/${TG_TOKEN}" ]]; then
+        read -p "Webhook в Телеграме уже установлен (${_url}), перерегистрировать? (y/N): " _answer
+        [[ "$_answer" =~ ^[YyДд] ]] && _tg_reg="true"
     fi
-    echo "✅ Регистрация webhook прошла успешно: ${_descr}"
+    if [[ "$_tg_reg" == "true" ]]; then
+        _json=$(curl -s \
+                     -F "url=https://${DOMAIN}:${TG_WEBHOOK_PORT}/${TG_TOKEN}" \
+                     -F "ip_address=${ROUTER_IP_EXTERNAL}" \
+                     -F "certificate=@${CERT_PATH}/host.crt" \
+                        "https://api.telegram.org/bot${TG_TOKEN}/setWebhook")
+
+        _ok=$(echo "$_json" | jq -r '.ok')
+        _descr=$(echo "$_json" | jq -r '.description')
+        if [[ "$_ok" != "true" ]]; then
+            echo "❌ Ошибка регистрации webhook: ${_descr}"
+            exit 4
+        fi
+        echo "✅ Регистрация webhook прошла успешно: ${_descr}"
+    fi
 fi
-echo "✅ Установка завершена, перезагрузите роутер"
+
+xkeentg --renew-telegram-commands
+logger -p notice -t "xkeen-tg" "Установлена версия ${VERSION}"
+echo "✅ Установка завершена"
