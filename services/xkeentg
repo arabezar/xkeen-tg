@@ -55,7 +55,7 @@ case "$ACTION" in
     --version)
         echo "${TOOL_NAME} v${VERSION}"
         ;;
-        
+
     --test)
         echo "== ps ($DAEMON_NAME):"
         ps | grep $DAEMON_NAME | grep -v grep | sed 's/^\s*//' | cut -d' ' -f1
@@ -65,8 +65,8 @@ case "$ACTION" in
         ;;
 
     --clean)
-		kill $(ps | grep "$DAEMON_NAME" | grep -v grep | sed 's/^\s*//' | cut -d' ' -f1 | xargs) &>/dev/null
-		kill $(netstat -tulpn 2>/dev/null | grep ":$TG_LOCAL_PORT " | xargs | rev | cut -d' ' -f1 | rev | cut -d/ -f1) &>/dev/null
+        kill $(ps | grep "$DAEMON_NAME" | grep -v grep | sed 's/^\s*//' | cut -d' ' -f1 | xargs) &>/dev/null
+        kill $(netstat -tulpn 2>/dev/null | grep ":$TG_LOCAL_PORT " | xargs | rev | cut -d' ' -f1 | rev | cut -d/ -f1) &>/dev/null
         ;;
 
     --renew-telegram-commands)

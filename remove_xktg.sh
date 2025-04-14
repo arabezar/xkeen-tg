@@ -76,6 +76,7 @@ if ask_user "❓ Удалить инструмент netcat? y(N)" "^[YyДд]$";
 fi
 
 if ask_user "❓ Удалить вэб-сервер lighttpd со всеми установленными модулями? y(N)" "^[YyДд]$"; then
+    opkg remove lighttpd-mod-accesslog
     opkg remove lighttpd-mod-rewrite
     opkg remove lighttpd-mod-setenv
     opkg remove lighttpd-mod-openssl

@@ -33,13 +33,70 @@ log() {
     echo -e "$(date +"%Y-%m-%d %T") - ${_msg}" >> "$_log_file"
 }
 
+escape_html() {
+    sed -e 's/&/\&amp;/g' \
+        -e 's/</\&lt;/g'  \
+        -e 's/>/\&gt;/g'
+}
+
+escape_markdown_v2() {
+    sed -e 's/\\/\\\\/g' \
+        -e 's/-/\\-/g' \
+        -e 's/_/\\_/g' \
+        -e 's/*/\\*/g' \
+        -e 's/\[/\\[/g' \
+        -e 's/]/\\]/g' \
+        -e 's/(/\\(/g' \
+        -e 's/)/\\)/g' \
+        -e 's/~/\\~/g' \
+        -e 's/`/\\`/g' \
+        -e 's/>/\\>/g' \
+        -e 's/#/\\#/g' \
+        -e 's/+/\\+/g' \
+        -e 's/=/\\=/g' \
+        -e 's/|/\\|/g' \
+        -e 's/{/\\{/g' \
+        -e 's/}/\\}/g' \
+        -e 's/\./\\./g' \
+        -e 's/!/\\!/g'
+}
+
 send_message() {
     local _msg="$1"
     local _user_id="$2"
-    if [ -z "$_user_id" ]; then
-        _user_id="$_chat_id"
-    fi
-    curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendMessage?chat_id=${_user_id}&text=${_msg// /%20}" &>/dev/null
+    [ -z "$_user_id" ] && _user_id="$_chat_id"
+    curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d "chat_id=${_user_id}" \
+            --data-urlencode "text=$_msg" &>/dev/null
+}
+
+send_message_formated() {
+    local _msg="$1"
+    local _parse_mode="$2"
+    local _user_id="$3"
+    [ -z "$_user_id" ] && _user_id="$_chat_id"
+    case "$_parse_mode" in
+        HTML | MarkdownV2 | Markdown)
+            curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+                 -d "parse_mode=${_parse_mode}" \
+                 -d "chat_id=${_user_id}" \
+                 --data-urlencode "text=${_msg}" &>/dev/null
+            ;;
+        *)
+            send_message "$_msg" "$_user_id"
+            ;;
+    esac
+}
+
+build_help() {
+    local _commands _lf _filepath _filename
+    for _filepath in $XKEENTG_PATH/*.tg; do
+        . $_filepath
+        _filename=${_filepath##*/}
+        _commands="${_commands}${_lf}$(cmd_help "/${_filename%.tg}")"
+        _lf="\n"
+    done
+    echo -e "$_commands"
 }
 
 # Бесконечный цикл для обработки входящих сообщений
@@ -98,21 +155,19 @@ while true; do
     fi
 
     # Парсинг текста сообщения - команды
+    . $XKEENTG_PATH/tg_null_cmd
     if [ -f "${XKEENTG_PATH}${_text}.tg" ]; then
         . "${XKEENTG_PATH}${_text}.tg"
         _reply=$(cmd_run "$_text")
     else
-        _commands="Команды:"
-        for _filepath in $XKEENTG_PATH/*.tg; do
-            . $XKEENTG_PATH/tg_null_cmd
-            . $_filepath
-            _filename=${_filepath##*/}
-            _commands="${_commands}\n$(cmd_help "/${_filename%.tg}")"
-        done
-        _reply=$(echo -e "$_commands")
+        cmd_parse_mode="HTML"
+        _reply="Команды:<pre>$(build_help | escape_html)</pre>"
+        # _reply="Команды:$(build_help)"
     fi
 
     # Отправляем ответ в Telegram
-    echo -e "\t${_reply}" >> "$LOG_FILE_MSG"
-    send_message "$_reply"
+    echo -e "\t${_reply//$'\n'/'\n\t'}" >> "$LOG_FILE_MSG"
+    send_message_formated "$_reply" "$cmd_parse_mode"
+    # _answer=$(send_message "$_reply")
+    # echo -e "\t$_answer" >> "$LOG_FILE_MSG" #&>/dev/null
 done

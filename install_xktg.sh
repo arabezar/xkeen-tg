@@ -205,6 +205,7 @@ opkg install lighttpd-mod-setenv &>/dev/null
 opkg install lighttpd-mod-openssl &>/dev/null
 opkg install lighttpd-mod-proxy &>/dev/null
 opkg install lighttpd-mod-rewrite &>/dev/null
+opkg install lighttpd-mod-accesslog &>/dev/null
 opkg install netcat &>/dev/null
 
 echo "Настройка модулей web-сервера..."
@@ -248,7 +249,13 @@ ssl.pemfile = "${CERT_PATH}/host.pem"
         url.rewrite-if-not-file = ( ".*" => "/none.html" )
     }
 }
+
+# mod-accesslog
+accesslog.filename = "/opt/var/log/lighttpd/access.log"
+accesslog.format = "%h %V %t \"%r\" %>s %b \"%{User-Agent}i\""
 EOF
+
+# https://redmine.lighttpd.net/projects/lighttpd/wiki/Mod_accesslog
 
 # установка сервиса
 mv -f www/* "$WWW_PATH"

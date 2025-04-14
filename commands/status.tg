@@ -7,8 +7,82 @@ cmd_help() {
 
 cmd_run() {
     local _uptime=$(uptime)
-    local _days=$(echo "$_uptime" | xargs |cut -d' ' -f3)
-    local _load=$(echo "$_uptime" | awk -F'load average:' '{print $2}')
-    echo "Роутер работает $_days дней"
-    echo "Текущая загрузка: $_load"
+    echo "⚡ Роутер работает (дней): $(echo "$_uptime" | xargs | cut -d' ' -f3)"
+    echo "💡 Текущая загрузка: $(echo "$_uptime" | awk -F'load average: ' '{print $2}')"
+
+    echo "🛡 XKeen $(_get_xkeen_version) (git: $(_get_git_version 'Skrill0/XKeen')) $(_get_xkeen_status)"
+    echo "🧩 Xray $(_get_xray_version) (git: $(_get_git_version 'XTLS/Xray-core'))"
+    # echo "📦 v2fly: $(_get_git_version 'v2fly/domain-list-community') / $(_get_git_version 'v2ray/geoip')"
+    echo "📦 v2fly: $(_get_git_version 'v2fly/domain-list-community') / $(_get_git_version 'loyalsoldier/v2ray-rules-dat')"
+    echo "📦 zkeen: $(_get_git_version 'jameszeroX/zkeen-domains') / $(_get_git_version 'jameszeroX/zkeen-ip')"
+
+    _get_geo_info_ipinfo
+    echo "👣 IP host: $_ip_info_ip $(_country_to_flag)($_ip_info_country)"
+    if _is_vpn_active; then
+        _get_geo_info_ipinfo proxy
+        echo "👣 IP VPS: $_ip_info_ip $(_country_to_flag)($_ip_info_country)"
+    else
+        echo "👣 IP VPS: недоступен"
+    fi
+}
+
+_is_vpn_active() {
+    [ $(curl -s -x "socks5h://127.0.0.1:1080" \
+             -w "%{http_code}" \
+                "https://connectivitycheck.gstatic.com/generate_204") \
+        -eq "204" ]
+}
+
+_get_geo_info_ipinfo() {
+    local _proxy=$([ "$1" = "proxy" ] && echo "-x "socks5h://127.0.0.1:1080"")
+    _ip_info_ip=""
+    _ip_info_country_code=""
+    _ip_info_country=""
+    local _geo_info="$(curl -s $_proxy "https://ipapi.co/json")"
+    if [ $? -eq 0 ]; then
+        _ip_info_ip="$(echo "$_geo_info" | jq -r '.ip')"
+        _ip_info_country_code="$(echo "$_geo_info" | jq -r '.country')"
+        _ip_info_country="$(echo "$_geo_info" | jq -r '.country_name')"
+    fi
+}
+
+_get_xkeen_version() {
+    which xkeen &>/dev/null && xkeen -v | xargs | rev | cut -d' ' -f1 | rev || echo "-"
+}
+
+_get_xkeen_status() {
+    if which xkeen &>/dev/null; then
+        $(xkeen -status | grep "не запущен") &>/dev/null && echo "не запущен ❌" || echo "запущен ✅"
+    else
+        echo "не найден ❌"
+    fi
+}
+
+_get_xray_version() {
+    which xray &>/dev/null && xray version | head -n 1 | cut -d' ' -f2 || echo "-"
+}
+
+_get_git_version() {
+    local _gitname=$1
+    curl -s "https://api.github.com/repos/${_gitname}/releases?per_page=1" \
+        | jq '.[0].tag_name' | tr -d '"'
+}
+
+_country_to_flag() {
+    if [ -n "$_ip_info_country_code" ]; then
+        local cp1=$((0x1F1A5 + $(printf '%d' "'${_ip_info_country_code:0:1}")))
+        local cp2=$((0x1F1A5 + $(printf '%d' "'${_ip_info_country_code:1:1}")))
+        if $(readlink "/proc/$$/exe" | grep -i busybox) &>/dev/null; then
+            printf "\\x$(printf %x $(( (cp1>>18&7)|0xF0 )))"
+            printf "\\x$(printf %x $(( (cp1>>12&63)|0x80 )))"
+            printf "\\x$(printf %x $(( (cp1>>6&63)|0x80 )))"
+            printf "\\x$(printf %x $(( (cp1&63)|0x80 )))"
+            printf "\\x$(printf %x $(( (cp2>>18&7)|0xF0 )))"
+            printf "\\x$(printf %x $(( (cp2>>12&63)|0x80 )))"
+            printf "\\x$(printf %x $(( (cp2>>6&63)|0x80 )))"
+            printf "\\x$(printf %x $(( (cp2&63)|0x80 )))"
+        else
+            printf $(printf '\\U%X\\U%X' $cp1 $cp2)
+        fi
+    fi
 }
