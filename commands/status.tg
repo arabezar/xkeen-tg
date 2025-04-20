@@ -2,20 +2,52 @@ cmd_description="Показать статус роутера"
 
 cmd_help() {
     local _cmd="$1"
-    echo "$_cmd                  - показать статус роутера и службы (статус, текущая и последняя версии xkeen, текущая и последняя версии xray, версии баз данных, внешние IP-адреса роутера)"
+    # echo "$_cmd                    - показать статус роутера и службы (статус, текущая и последняя версии xkeen, текущая и последняя версии xray, версии баз данных, внешние IP-адреса роутера)"
+    echo "/status [uptime|xkeen|xray|db|ip] - показать статус роутера и службы (статус, текущая и последняя версии xkeen, текущая и последняя версии xray, версии баз данных, внешние IP-адреса роутера)"
 }
 
 cmd_run() {
-    local _uptime=$(uptime)
-    echo "⚡ Роутер работает (дней): $(echo "$_uptime" | xargs | cut -d' ' -f3)"
-    echo "💡 Текущая загрузка: $(echo "$_uptime" | awk -F'load average: ' '{print $2}')"
+    if [ -z "$2" ]; then
+        _run_uptime
+        _run_xkeen
+        _run_xray
+        _run_db
+        _run_ip
+    else
+        local _param
+        for _param in $@; do
+            case "$_param" in
+                u*)     _run_uptime     ;;
+                xk*)    _run_xkeen      ;;
+                xr*)    _run_xray       ;;
+                d*)     _run_db         ;;
+                i*)     _run_ip         ;;
+            esac
+        done
+    fi
+}
 
+_run_uptime() {
+    local _uptime=$(uptime)
+    echo "⚡ Роутер работает: $(echo "$_uptime" | xargs | cut -d' ' -f3)"
+    echo "💡 Текущая загрузка: $(echo "$_uptime" | awk -F'load average: ' '{print $2}')"
+}
+
+_run_xkeen() {
     echo "🛡 XKeen $(_get_xkeen_version) (git: $(_get_git_version 'Skrill0/XKeen')) $(_get_xkeen_status)"
+}
+
+_run_xray() {
     echo "🧩 Xray $(_get_xray_version) (git: $(_get_git_version 'XTLS/Xray-core'))"
+}
+
+_run_db() {
     # echo "📦 v2fly: $(_get_git_version 'v2fly/domain-list-community') / $(_get_git_version 'v2ray/geoip')"
     echo "📦 v2fly: $(_get_git_version 'v2fly/domain-list-community') / $(_get_git_version 'loyalsoldier/v2ray-rules-dat')"
     echo "📦 zkeen: $(_get_git_version 'jameszeroX/zkeen-domains') / $(_get_git_version 'jameszeroX/zkeen-ip')"
+}
 
+_run_ip() {
     _get_geo_info_ipinfo
     echo "👣 IP host: $_ip_info_ip $(_country_to_flag)($_ip_info_country)"
     if _is_vpn_active; then
@@ -63,7 +95,7 @@ _get_xray_version() {
 }
 
 _get_git_version() {
-    local _gitname=$1
+    local _gitname="$1"
     curl -s "https://api.github.com/repos/${_gitname}/releases?per_page=1" \
         | jq '.[0].tag_name' | tr -d '"'
 }

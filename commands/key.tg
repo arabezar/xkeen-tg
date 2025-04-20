@@ -1,10 +1,312 @@
 cmd_description="Показать или обновить конфигурацию"
+cmd_parse_mode="MarkdowsV2"
 
 cmd_help() {
     local _cmd="$1"
-    echo "$_cmd [<url>]             - обновить, если указан url, параметры соединения в конфигурации (+ перезагрузка), в ответе - заменённый URL с датой в комменте, иначе - показать url текущей конфигурации"
+    # echo "$_cmd [<url>]               - обновить, если указан url, параметры соединения в конфигурации (+ перезагрузка), в ответе - заменённый URL с датой в комменте, иначе - показать url текущей конфигурации"
+    echo "$_cmd [<url>] - показать или обновить (если указан url) параметры соединения в конфигурации (+ перезагрузка, если требуется)"
 }
 
 cmd_run() {
-    echo "Пока не реализовано"
-} 
+    local _cmd="$1"
+    local _url="$2"
+
+    [ -z "$_url" ] && echo -n "Текущий url:" || echo -n "Бывший url:"
+    _find_xray_config_outbounds "$_url"
+    [ $? -eq 0 ] && [ -n "$_url" ] && xkeen --restart
+    return $?
+}
+
+_xray_config_path="/opt/etc/xray/configs"
+_vps_outbound_tag="vless-reality"
+
+_find_xray_config_mask() {
+    local _json="$1"
+    local _mask="$2"
+    local _from="$3"
+    if [ -n "$_from" ]; then
+        echo "$_json" | tail -n "+$_from" | grep -iE "$_mask" -m 1 | xargs | cut -d' ' -f1
+    else
+        echo "$_json" | grep -iE "$_mask" -m 1 | xargs | cut -d' ' -f1
+    fi
+}
+
+_find_xray_config_block_multilevel() {
+    local _json="$1"
+    local _from="$2"
+    local _to="$3"
+    local _from_line="$4"
+
+    # local _replacement="?"
+    # local _list=$(echo "$_json" | grep -E "{|}|${_vps_outbound_tag}" | grep -vE "^[[:space:]]*\/\/" | sed -e "s/${_vps_outbound_tag}/${_replacement}/" -e "s/[^\{\?\}0-9]/ /g" | xargs)
+    local _list=$(echo "$_json" | grep -E "{|}|${_vps_outbound_tag}" | grep -vE "^[[:space:]]*\/\/" | sed -e "s/[^\{\?\}0-9]/ /g" | xargs)
+    local _line_start=0
+    local _val _line_end _level _found
+
+    for _val in $_list; do
+        [[ "$_val" =~ [[:digit:]]+ ]] && _line_n=$_val
+        (( $_line_n < $_from_line )) && continue
+        [[ "$_val" =~ ${_from} ]] && _level=$(( $_level + 1 ))
+        [[ "$_val" =~ ${_to} ]] && _level=$(( $_level - 1 ))
+        [[ $_level == 1 ]] && [[ $_line_start == 0 ]] && _line_start=$_line_n
+        # [[ "$_val" =~ ${_replacement} ]] && [[ $_level == 1 ]] && _found="true"
+        [[ $_level == 0 ]] && [[ $_line_start != 0 ]] && _line_end=$_line_n && echo "$_line_start $_line_end" && break
+    done
+}
+
+_is_valid_domain() {
+    local domain="$1"
+    [[ "$domain" =~ ^([a-zA-Z0-9](-?[a-zA-Z0-9])*\.)+[a-zA-Z]{2,}$ ]]
+}
+
+_get_config_value() {
+    local _filename="$1"
+    local _key="$2"
+    local _line_n="$3"
+    sed -n -r "${_line_n}s/^[[:space:]]*\"${_key}\"[[:space:]]*:[[:space:]]*\"?([^\",]*)\"?,?/\1/p" "${_filename}"
+}
+
+_set_config_value() {
+    local _filename="$1"
+    local _key="$2"
+    local _line_n="$3"
+    local _new_value="$4"
+    sed -i -r "${_line_n}s/^([[:space:]]*\"${_key}\")[[:space:]]*:[[:space:]]*(\")?[^\",]*(\")?(.*)$/\1: \2${_new_value}\3\4/" "${_filename}"
+}
+
+_urlencode() {
+    local str="$1"
+    local i c
+
+    for ((i = 0; i < ${#str}; i++)); do
+        c="${str:$i:1}"
+        case "$c" in
+            [a-zA-Z0-9.~_-]) printf "$c" ;;
+            *) printf '%%%02X' "'$c" ;;
+        esac
+    done
+    echo
+}
+
+_urldecode() {
+    local str="${1//+/ }"
+    printf '%b' "${str//%/\\x}"
+}
+
+_build_config_url() {
+    # {protocol}://{id}@{address}:{port}?type={type}&encryption={encryption}&flow={flow}&security={security}&pbk={pbk}&fp={fp}&sni={sni}&sid={sid}=spx={spx}#{comment}
+    local _filename="$1"
+    local _line_protocol="$2"
+    local _line_address="$3"
+    local _line_port="$4"
+    local _line_id="$5"
+    local _line_encryption="$6"
+    local _line_flow="$7"
+    local _line_network="$8"
+    local _line_security="$9"
+    local _line_publicKey="${10}"
+    local _line_fingerprint="${11}"
+    local _line_serverName="${12}"
+    local _line_shortId="${13}"
+    local _line_spiderX="${14}"
+    local _comment=$(date +"%F")
+    echo -n "<pre>"
+    echo -n "$(_get_config_value "$_filename" "protocol" "$_line_protocol")://"
+    echo -n "$(_get_config_value "$_filename" "id" "$_line_id")@"
+    echo -n "$(_get_config_value "$_filename" "address" "$_line_address"):"
+    echo -n "$(_get_config_value "$_filename" "port" "$_line_port")?"
+    echo -n "type=$(_get_config_value "$_filename" "network" "$_line_network")&"
+    echo -n "encryption=$(_get_config_value "$_filename" "encryption" "$_line_encryption")&"
+    echo -n "flow=$(_get_config_value "$_filename" "flow" "$_line_flow")&"
+    echo -n "security=$(_get_config_value "$_filename" "security" "$_line_security")&"
+    echo -n "pbk=$(_get_config_value "$_filename" "publicKey" "$_line_publicKey")&"
+    echo -n "fp=$(_get_config_value "$_filename" "fingerprint" "$_line_fingerprint")&"
+    echo -n "sni=$(_get_config_value "$_filename" "serverName" "$_line_serverName")&"
+    echo -n "sid=$(_get_config_value "$_filename" "shortId" "$_line_shortId")&"
+    echo -n "spx=$(_urlencode "$(_get_config_value "$_filename" "spiderX" "$_line_spiderX")")"
+    echo -n "#$(_urlencode "$_comment")"
+    echo -n "</pre>"
+}
+
+_add_error() {
+    local _err_msg_add="$1"
+    [ -z "${_err_msg}" ] && _err_msg="${_err_msg_add}" || _err_msg="${_err_msg}\n${_err_msg_add}"
+}
+
+_replace_config_url() {
+    local _filename="$1"
+    local _line_protocol="$2"
+    local _line_address="$3"
+    local _line_port="$4"
+    local _line_id="$5"
+    local _line_encryption="$6"
+    local _line_flow="$7"
+    local _line_network="$8"
+    local _line_security="$9"
+    local _line_publicKey="${10}"
+    local _line_fingerprint="${11}"
+    local _line_serverName="${12}"
+    local _line_shortId="${13}"
+    local _url="${14}"
+
+    # парсинг url
+    local _base="${_url%%#*}"
+    # tag="${url##*#}"
+    local _new_protocol="${_base%%://*}"
+    local _remainder="${_base#*://}"
+    local _new_id="${_remainder%%@*}"
+    local _hostport_params="${_remainder#*@}"
+    local _new_address="${_hostport_params%%:*}"
+    local _port_params="${_hostport_params#*:}"
+    local _new_port="${_port_params%%\?*}"
+    local _params="${_port_params#*\?}"
+    local _err_msg
+
+    # проверка параметров соединения
+    _err_msg=""
+    [[ "$_new_protocol" != "vless" ]] && _add_error "Неизвестный протокол: $_new_protocol"
+    [[ ! "$_new_id" =~ ^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$ ]] && _add_error "Неверный UUID: $_new_id"
+    [[ ! "$_new_address" =~ ^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$ ]] && _add_error "Неверный IP: $_new_address"
+    [[ ! "$_new_port" =~ ^[0-9]+$ ]] || (( "$_new_port" < 1 || "$_new_port" > 65535 )) && _add_error "Неверный порт: $_new_port"
+
+    # считывание текущих параметров из текущей конфигурации
+    local _old_protocol="$(_get_config_value "$_filename" "protocol" "$_line_protocol")"
+    local _old_id="$(_get_config_value "$_filename" "id" "$_line_id")"
+    local _old_address="$(_get_config_value "$_filename" "address" "$_line_address")"
+    local _old_port="$(_get_config_value "$_filename" "port" "$_line_port")"
+
+    local _old_type="$(_get_config_value "$_filename" "network" "$_line_network")"
+    local _old_security="$(_get_config_value "$_filename" "security" "$_line_security")"
+    local _old_pbk="$(_get_config_value "$_filename" "publicKey" "$_line_publicKey")"
+    local _old_fp="$(_get_config_value "$_filename" "fingerprint" "$_line_fingerprint")"
+    local _old_sni="$(_get_config_value "$_filename" "serverName" "$_line_serverName")"
+    local _old_sid="$(_get_config_value "$_filename" "shortId" "$_line_shortId")"
+    local _old_spx="$(_urlencode "$(_get_config_value "$_filename" "spiderX" "$_line_spiderX")")"
+    local _old_encryption="$(_get_config_value "$_filename" "encryption" "$_line_encryption")"
+    local _old_flow="$(_get_config_value "$_filename" "flow" "$_line_flow")"
+
+    # подготовка новых параметров
+    local _new_type=""
+    local _new_security=""
+    local _new_pbk=""
+    local _new_fp=""
+    local _new_sni=""
+    local _new_sid=""
+    local _new_spx=""
+    local _new_encryption=""
+    local _new_flow=""
+
+    # парсинг оставшихся параметров url
+    local _pair _key _value
+    IFS='&'
+    for _pair in $_params; do
+        _key="${_pair%%=*}"
+        _value="${_pair#*=}"
+
+        case "$_key" in
+            type)       _new_type="$_value" ;;
+            security)   _new_security="$_value" ;;
+            pbk)        _new_pbk="$_value" ;;
+            fp)         _new_fp="$_value" ;;
+            sni)        _new_sni="$_value" ;;
+            sid)        _new_sid="$_value" ;;
+            spx)        _new_spx="$_value" ;;
+            encryption) _new_encryption="$_value" ;;
+            flow)       _new_flow="$_value" ;;
+            *)
+                _add_error "Неизвестный параметр: $_pair"
+                ;;
+        esac
+    done
+
+    # проверка полноты задания параметров
+    [ -z "$_new_type" ] && _add_error "Не задан протокол передачи type" || [[ "$_new_type" != "tcp" ]] && _add_error "Протокол передачи type=${_new_type} не поддерживается"
+    [ -z "$_new_security" ] && _add_error "Не задан протокол безопасности security" || [[ "$_new_security" != "reality" ]] && _add_error "Протокол безопасности security=${_new_security} не поддерживается"
+    [ -z "$_new_pbk" ] && _add_error "Не задан публичный ключ pbk"
+    [ -z "$_new_fp" ] && _add_error "Не задан браузер fp"
+    [ -z "$_new_sni" ] && _add_error "Не задано имя сервера sni"
+    [ -z "$_new_sid" ] && _add_error "Не задан идентификатор клиента sid"
+    [ -z "$_new_spx" ] && _add_error "Не задан путь spx"
+    [ -z "$_new_encryption" ] && _add_error "Не задано шифрование encryption" || [[ "$_new_encryption" != "none" ]] && _add_error "Шифрование encryption=${_new_encryption} не поддерживается"
+
+    # проверить, изменились ли параметры
+    [[ "$_old_protocol" == "$_new_protocol" ]] && \
+    [[ "$_old_id" == "$_new_id" ]] && \
+    [[ "$_old_address" == "$_new_address" ]] && \
+    [[ "$_old_port" == "$_new_port" ]] && \
+    [[ "$_old_type" == "$_new_type" ]] && \
+    [[ "$_old_security" == "$_new_security" ]] && \
+    [[ "$_old_pbk" == "$_new_pbk" ]] && \
+    [[ "$_old_fp" == "$_new_fp" ]] && \
+    [[ "$_old_sni" == "$_new_sni" ]] && \
+    [[ "$_old_sid" == "$_new_sid" ]] && \
+    [[ "$_old_spx" == "$_new_spx" ]] && \
+    [[ "$_old_encryption" == "$_new_encryption" ]] && \
+    [[ "$_old_flow" == "$_new_flow" ]] && _add_error "Параметры не измелись"
+
+    [ -n "$_err_msg" ] && echo -e "$_err_msg" && return 1
+
+    # заменить конфигурацию
+echo
+    [[ "$_old_protocol" != "$_new_protocol" ]] && _set_config_value "$_filename" "protocol" "$_line_protocol" "$_new_protocol"
+    [[ "$_old_id" != "$_new_id" ]] && _set_config_value "$_filename" "id" "$_line_id" "$_new_id"
+    [[ "$_old_address" != "$_new_address" ]] && _set_config_value "$_filename" "address" "$_line_address" "$_new_address"
+    [[ "$_old_port" != "$_new_port" ]] && _set_config_value "$_filename" "port" "$_line_port" "$_new_port"
+    [[ "$_old_type" != "$_new_type" ]] && _set_config_value "$_filename" "network" "$_line_network" "$_new_type"
+    [[ "$_old_security" != "$_new_security" ]] && _set_config_value "$_filename" "security" "$_line_security" "$_new_security"
+    [[ "$_old_pbk" != "$_new_pbk" ]] && _set_config_value "$_filename" "publicKey" "$_line_publicKey" "$_new_pbk"
+    [[ "$_old_fp" != "$_new_fp" ]] && _set_config_value "$_filename" "fingerprint" "$_line_fingerprint" "$_new_fp"
+    [[ "$_old_sni" != "$_new_sni" ]] && _set_config_value "$_filename" "serverName" "$_line_serverName" "$_new_sni"
+    [[ "$_old_sid" != "$_new_sid" ]] && _set_config_value "$_filename" "shortId" "$_line_shortId" "$_new_sid"
+    [[ "$_old_spx" != "$_new_spx" ]] && _set_config_value "$_filename" "spiderX" "$_line_spiderX" "$(escape_special "$(_urldecode "$_new_spx")")"
+    [[ "$_old_encryption" != "$_new_encryption" ]] && _set_config_value "$_filename" "encryption" "$_line_encryption" "$_new_encryption"
+    [[ "$_old_flow" != "$_new_flow" ]] && _set_config_value "$_filename" "flow" "$_line_flow" "$_new_flow"
+}
+
+_find_xray_config_outbounds() {
+    local _url="$1"
+    local _domain _filename _json _line_n _block_n _start _end _block
+    if [ -d "$_xray_config_path" ]; then
+        for _filename in ${_xray_config_path}/*.json; do
+            _json="$(cat -n "$_filename")"
+            _line_n=$(_find_xray_config_mask "$_json" "\"outbounds\"")
+            while [ -n "$_line_n" ]; do
+                # found outbounds line num
+                _block_n="$(_find_xray_config_block_multilevel "$_json" "\{" "\}" "$_line_n")"
+                if [ -n "$_block_n" ]; then
+                    # get the section (dictionary)
+                    _start=$(echo "$_block_n" | cut -d' ' -f1)
+                    _end=$(echo "$_block_n" | cut -d' ' -f2)
+                    _line_n=$(($_end + 1))
+                    _block="$(echo "$_json" | sed -n "${_start},${_end}p")"
+                    if [ -n "$(_find_xray_config_mask "$_block" "\"tag\"\s*:\s*\"${_vps_outbound_tag}\"")" ]; then
+                        _line_protocol="$(_find_xray_config_mask "$_block" "\"protocol\"\s*:")"
+                        _line_address="$(_find_xray_config_mask "$_block" "\"address\"\s*:")"
+                        _line_port="$(_find_xray_config_mask "$_block" "\"port\"\s*:")"
+                        _line_id="$(_find_xray_config_mask "$_block" "\"id\"\s*:")"
+                        _line_encryption="$(_find_xray_config_mask "$_block" "\"encryption\"\s*:")"
+                        _line_flow="$(_find_xray_config_mask "$_block" "\"flow\"\s*:")"
+                        _line_network="$(_find_xray_config_mask "$_block" "\"network\"\s*:")"
+                        _line_security="$(_find_xray_config_mask "$_block" "\"security\"\s*:")"
+                        _line_publicKey="$(_find_xray_config_mask "$_block" "\"publicKey\"\s*:")"
+                        _line_fingerprint="$(_find_xray_config_mask "$_block" "\"fingerprint\"\s*:")"
+                        _line_serverName="$(_find_xray_config_mask "$_block" "\"serverName\"\s*:")"
+                        _line_shortId="$(_find_xray_config_mask "$_block" "\"shortId\"\s*:")"
+                        _line_spiderX="$(_find_xray_config_mask "$_block" "\"spiderX\"\s*:")"
+
+                        _build_config_url "$_filename" "$_line_protocol" "$_line_address" "$_line_port" "$_line_id" "$_line_encryption" "$_line_flow" "$_line_network" "$_line_security" "$_line_publicKey" "$_line_fingerprint" "$_line_serverName" "$_line_shortId" "$_line_spiderX"
+                        if [ -n "$_url" ]; then
+                            _replace_config_url "$_filename" "$_line_protocol" "$_line_address" "$_line_port" "$_line_id" "$_line_encryption" "$_line_flow" "$_line_network" "$_line_security" "$_line_publicKey" "$_line_fingerprint" "$_line_serverName" "$_line_shortId" "$_url"
+                            return $?
+                        fi
+                    fi
+                else
+                    _line_n=""
+                fi
+            done
+        done
+    else
+        echo "Конфигурация xray не найдена"
+    fi
+    return 1
+}

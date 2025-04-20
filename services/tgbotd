@@ -61,6 +61,10 @@ escape_markdown_v2() {
         -e 's/!/\\!/g'
 }
 
+escape_special() {
+    sed -e 's/\//\\\//g'
+}
+
 send_message() {
     local _msg="$1"
     local _user_id="$2"
@@ -158,7 +162,7 @@ while true; do
     . $XKEENTG_PATH/tg_null_cmd
     if [ -f "${XKEENTG_PATH}${_text}.tg" ]; then
         . "${XKEENTG_PATH}${_text}.tg"
-        _reply=$(cmd_run "$_text")
+        _reply=$(cmd_run $_text)
     else
         cmd_parse_mode="HTML"
         _reply="Команды:<pre>$(build_help | escape_html)</pre>"

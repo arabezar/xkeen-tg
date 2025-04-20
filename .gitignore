@@ -2,5 +2,6 @@
 /.vscode
 /*.tar
 /30
+/configs
 /4help
-/test.sh
+/t*.sh

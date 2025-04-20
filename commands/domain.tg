@@ -2,11 +2,327 @@ cmd_description="Добавление и удаление доменов"
 
 cmd_help() {
     local _cmd="$1"
-    echo "$_cmd check|? <domain> - проверить статус домена в конфигурационных файлах"
-    echo "$_cmd add|+ <domain>   - добавить домен в конфигурацию (+ перезагрузка)"
-    echo "$_cmd del|- <domain>   - закомментировать домен в конфигурации (+ перезагрузка)"
-}
+    # echo "$_cmd check|? <domain>   - проверить статус домена в конфигурационных файлах"
+    # echo "$_cmd add|+ <domain>     - добавить домен в конфигурацию (+ перезагрузка)"
+    # echo "$_cmd del|- <domain>     - закомментировать домен в конфигурации (+ перезагрузка)"
+    # echo "$_cmd comment|# <domain> - закомментировать домен в конфигурации (+ перезагрузка)"
+    echo "/domain [check|?|add|+|del|-|comment|#] <domain> - операции с доменом в конфигурационных файлах - проверка статуса, добавление, удаление, деактивация (+ перезагрузка, если необходимо)"
+} 
 
 cmd_run() {
-    echo "Пока не реализовано"
+    local _cmd="$1"
+    local _subcmd="$2"
+    local _domain="$3"
+
+    if [ -z "$_subcmd" ]; then
+        echo "Не реализовано (субкоманд нет)"
+    elif [ "$(echo "$@" | wc -w)" -ne 3 ]; then
+        cmd_help "$_cmd"
+    else
+        case "$_subcmd" in
+            ch* | \?)
+                _find_xray_config_routing_domains "_domain_check_status" "$_domain"
+                ;;
+            a* | \+)
+                _find_xray_config_routing_domains "_domain_add" "$_domain"
+                [ $? -eq 0 ] && xkeen --restart
+                ;;
+            d* | \-)
+                _find_xray_config_routing_domains "_domain_del" "$_domain"
+                [ $? -eq 0 ] && xkeen --restart
+                ;;
+            co* | \#)
+                _find_xray_config_routing_domains "_domain_comment" "$_domain"
+                [ $? -eq 0 ] && xkeen --restart
+                ;;
+            *) cmd_help "$_cmd"
+                ;;
+        esac
+    fi
+    return $?
+}
+
+_xray_config_path="/opt/etc/xray/configs"
+_vps_outbound_tag="vless-reality"
+
+_find_xray_config_mask() {
+    local _json="$1"
+    local _mask="$2"
+    local _from="$3"
+    if [ -n "$_from" ]; then
+        echo "$_json" | tail -n "+$_from" | grep -iE "$_mask" -m 1 | xargs | cut -d' ' -f1
+    else
+        echo "$_json" | grep -iE "$_mask" -m 1 | xargs | cut -d' ' -f1
+    fi
+}
+
+_find_xray_config_block() {
+    local _json="$1"
+    local _from="$2"
+    local _to="$3"
+    local _from_line="$4"
+    local _start _end
+    if [ -n "$_json" -a -n "$_from" ]; then
+        _start=$(_find_xray_config_mask "$_json" "$_from" "$_from_line")
+        _end=$(_find_xray_config_mask "$_json" "$_to" "$_from_line")
+        [ -n "$_start" -a -n "$_end" ] && echo "$_start $_end"
+    fi
+}
+
+_domain_check_status() {
+    local _count="$1"
+    local _domain="$2"
+    local _filename="$3"
+    local _1st_n="$4"
+    local _line_n="$5"
+    local _last_n="$6"
+    case "$_count" in
+        0)
+            echo "Домен не найден"
+            ;;
+        1)
+            local _line="$(sed -n "${_line_n}p" "$_filename" | sed "s/^\s*//")"
+            case "$_line" in
+                /*)
+                    echo "Домен найден, но закомментирован"
+                    return 0
+                    ;;
+                \"*)
+                    echo "Домен найден"
+                    return 0
+                    ;;
+                *)
+                    echo "Ошибка поиска"
+                    ;;
+            esac
+            ;;
+        *)
+            echo "Домен не уникален"
+            ;;
+    esac
+    return 1
+}
+
+_fix_xray_config_domain_add() {
+    local _filename="$1"
+    local _1st_n="$2"
+    local _line_n="$3"
+    local _last_n="$4"
+    local _delta="$5"
+    local _line_cur=$(("$_line_n" + "$_delta"))
+    local _line
+    for _n in $(seq "$_line_cur" "$_delta" $([[ "$_delta" > 0 ]] && echo "$_last_n" || echo "$_1st_n")); do
+        _line="$(sed -n "${_n}p" "$_filename")"
+        if [[ "$_line" =~ ^[[:space:]]*\".*\" ]]; then
+            # найдена значимая строка с доменом
+            # проверить запятую в конце текущей строки (+1) или найденной предыдущей (-1)
+            [[ "$_delta" > 0 ]] && _line="$(sed -n "${_line_n}p" "$_filename")" && _line_cur="$_line_n" || _line_cur="$_n"
+            ! [[ "$_line" =~ ^[[:space:]]*\".*\"[[:space:]]*, ]] && sed -i "${_line_cur}s/\(\".*\"\)/\1\,/" "$_filename" &>/dev/null
+            break
+        fi
+        _line=""
+    done
+    # удалить запятую в конце текущей строки (+1)
+    [[ "$_delta" > 0 && -z "$_line" ]] && sed -i "${_line_n}s/\(\".*\"\)\\s*,/\1/" "$_filename" &>/dev/null
+}
+
+_fix_xray_config_domain_del() {
+    local _filename="$1"
+    local _1st_n="$2"
+    local _line_n="$3"
+    local _last_n="$4"
+    local _delta="$5"
+    local _line_cur=$(("$_line_n" + "$_delta"))
+    local _line
+    for _n in $(seq "$_line_cur" "$_delta" $([[ "$_delta" > 0 ]] && echo "$_last_n" || echo "$_1st_n")); do
+        _line="$(sed -n "${_n}p" "$_filename")"
+        if [[ "$_line" =~ ^[[:space:]]*\".*\" ]]; then
+            # найдена значимая строка с доменом
+            # если в конце текущей строки нет запятой, то её не должно быть и у предыдущей найденной (-1)
+            _line="$(sed -n "${_line_n}p" "$_filename")"
+            ! [[ "$_line" =~ ^[[:space:]]*\".*\"[[:space:]]*, ]] && sed -i "${_n}s/\(\".*\"\)\\s*,/\1/" "$_filename" &>/dev/null
+            break
+        fi
+    done
+}
+
+_domain_add() {
+    local _count="$1"
+    local _domain="$2"
+    local _filename="$3"
+    local _1st_n="$4"
+    local _line_n="$5"
+    local _last_n="$6"
+    local _line _spaces _char _line_cur
+    case "$_count" in
+        0)
+            _line="$(sed -n "${_last_n}p" "$_filename" | escape_special)"
+            _spaces="$(echo "$_line" | grep -oE "^\s*" | head -n 1)"
+            # добавить после последней строки новую
+            sed -i "${_last_n}s/${_line}/${_line}\n${_spaces}\"${_domain}\"/" "$_filename" &>/dev/null
+            _last_n="$(($_last_n + 1))"
+            _line_n="$_last_n"
+            # если есть предыдующие значимые строки, добавить в конец предыдущей значимой строки запятую, если требуется
+            _fix_xray_config_domain_add "$_filename" "$_1st_n" "$_line_n" "$_last_n" -1
+            # если есть последующие значимые строки, добавить к текущей строке запятую, если её нет, иначе удалить запятую
+            _fix_xray_config_domain_add "$_filename" "$_1st_n" "$_line_n" "$_last_n" 1
+            echo "Домен добавлен"
+            return 0
+            ;;
+        1)
+            _char=$(sed -n "${_line_n}p" "$_filename" | grep -oE "\S" | head -n 1)
+            case "$_char" in
+                /*)
+                    # раскомментировать строку
+                    sed -i "${_line_n}s|//||" "$_filename" &>/dev/null
+                    # если есть предыдующие значимые строки, добавить в конец предыдущей значимой строки запятую, если требуется
+                    _fix_xray_config_domain_add "$_filename" "$_1st_n" "$_line_n" "$_last_n" -1
+                    # если есть последующие значимые строки, добавить к текущей строке запятую, если её нет, иначе удалить запятую
+                    _fix_xray_config_domain_add "$_filename" "$_1st_n" "$_line_n" "$_last_n" 1
+                    echo "Домен раскомментирован"
+                    return 0
+                    ;;
+                \"*)
+                    echo "Домен уже существует"
+                    ;;
+                *)
+                    echo "Ошибка поиска"
+                    ;;
+            esac
+            ;;
+        *)
+            echo "Домен не уникален"
+            ;;
+    esac
+    return 1
+}
+
+_domain_comment() {
+    local _count="$1"
+    local _domain="$2"
+    local _filename="$3"
+    local _1st_n="$4"
+    local _line_n="$5"
+    local _last_n="$6"
+    local _line _spaces _char _line_cur
+    case "$_count" in
+        0)
+            echo "Домен не найден"
+            ;;
+        1)
+            _char=$(sed -n "${_line_n}p" "$_filename" | grep -oE "\S" | head -n 1)
+            case "$_char" in
+                /*)
+                    echo "Домен уже закомментирован"
+                    ;;
+                \"*)
+                    # если в конце текущей строки нет запятой, то её не должно быть и у предыдущей найденной (-1)
+                    _fix_xray_config_domain_del "$_filename" "$_1st_n" "$_line_n" "$_last_n" -1
+                    # закомментировать строку
+                    sed -i "${_line_n}s|\"|//\"|" "$_filename" &>/dev/null
+                    echo "Домен закомментирован"
+                    return 0
+                    ;;
+                *)
+                    echo "Ошибка поиска"
+                    ;;
+            esac
+            ;;
+        *)
+            echo "Домен не уникален"
+            ;;
+    esac
+    return 1
+}
+
+_domain_del() {
+    local _count="$1"
+    local _domain="$2"
+    local _filename="$3"
+    local _1st_n="$4"
+    local _line_n="$5"
+    local _last_n="$6"
+    local _line _spaces _char _line_cur
+    case "$_count" in
+        0)
+            echo "Домен не найден"
+            ;;
+        1)
+            _char=$(sed -n "${_line_n}p" "$_filename" | grep -oE "\S" | head -n 1)
+            case "$_char" in
+                /*)
+                    # удалить строку
+                    sed -i "${_line_n}d" "$_filename" &>/dev/null
+                    echo "Домен удалён"
+                    ;;
+                \"*)
+                    # если в конце текущей строки нет запятой, то её не должно быть и у предыдущей найденной (-1)
+                    _fix_xray_config_domain_del "$_filename" "$_1st_n" "$_line_n" "$_last_n" -1
+                    # удалить строку
+                    sed -i "${_line_n}d" "$_filename" &>/dev/null
+                    echo "Домен удалён"
+                    return 0
+                    ;;
+                *)
+                    echo "Ошибка поиска"
+                    ;;
+            esac
+            ;;
+        *)
+            echo "Домен не уникален"
+            ;;
+    esac
+    return 1
+}
+
+_find_xray_config_routing_domains() {
+    local _action="$1"
+    local _domain="$2"
+    local _filename _json _line_n _block_n _start _end _block
+    if [ -d "$_xray_config_path" ]; then
+        for _filename in ${_xray_config_path}/*.json; do
+            _json="$(cat -n "$_filename")"
+            _line_n=$(_find_xray_config_mask "$_json" "\"routing\"" | _find_xray_config_mask "$_json" "\"rules\"")
+            while [ -n "$_line_n" ]; do
+                # found rules line num
+                _block_n="$(_find_xray_config_block "$_json" "\{" "\}" "$_line_n")"
+                if [ -n "$_block_n" ]; then
+                    # get the section (dictionary)
+                    _start=$(echo "$_block_n" | cut -d' ' -f1)
+                    _end=$(echo "$_block_n" | cut -d' ' -f2)
+                    _line_n=$(($_end + 1))
+                    _block="$(echo "$_json" | sed -n "${_start},${_end}p")"
+                    if [ -n "$(_find_xray_config_mask "$_block" "\"outboundTag\"\s*:\s*\"${_vps_outbound_tag}\"")" ]; then
+                        _start="$(_find_xray_config_mask "$_block" "\"domain\"\s*:")"
+                        if [ -n "$_start" ]; then
+                            # domain start
+                            _block_n="$(_find_xray_config_block "$_json" "\[" "\]" "$_start")"
+                            if [ -n "$_block_n" ]; then
+                                # get the section (array)
+                                _start=$(($(echo "$_block_n" | cut -d' ' -f1) + 1))
+                                _end=$(($(echo "$_block_n" | cut -d' ' -f2) - 1))
+                                _block="$(echo "$_json" | sed -n "${_start},${_end}p")"
+
+                                # find domain in section
+                                _found="$(echo "$_block" | grep -F "\"$_domain\"")"
+                                if [ -n "$_found" ]; then
+                                    _found_cnt="$(echo "$_found" | wc -l)"
+                                    _found_n="$(echo $_found | xargs | cut -d' ' -f1)"
+                                else
+                                    _found_cnt="0"
+                                fi
+                                $_action "$_found_cnt" "$_domain" "$_filename" "$_start" "$_found_n" "$_end"
+                                return $?
+                            fi
+                        fi
+                    fi
+                else
+                    _line_n=""
+                fi
+            done
+        done
+    else
+        echo "Конфигурация xray не найдена"
+    fi
+    return 1
 }
