@@ -37,9 +37,7 @@ _find_xray_config_block_multilevel() {
     local _to="$3"
     local _from_line="$4"
 
-    # local _replacement="?"
-    # local _list=$(echo "$_json" | grep -E "{|}|${_vps_outbound_tag}" | grep -vE "^[[:space:]]*\/\/" | sed -e "s/${_vps_outbound_tag}/${_replacement}/" -e "s/[^\{\?\}0-9]/ /g" | xargs)
-    local _list=$(echo "$_json" | grep -E "{|}|${_vps_outbound_tag}" | grep -vE "^[[:space:]]*\/\/" | sed -e "s/[^\{\?\}0-9]/ /g" | xargs)
+    local _list=$(echo "$_json" | grep -E "{|}" | grep -vE "^[[:space:]]*\/\/" | sed -e "s/[^\{\?\}0-9]/ /g" | xargs)
     local _line_start=0
     local _val _line_end _level _found
 
@@ -49,7 +47,6 @@ _find_xray_config_block_multilevel() {
         [[ "$_val" =~ ${_from} ]] && _level=$(( $_level + 1 ))
         [[ "$_val" =~ ${_to} ]] && _level=$(( $_level - 1 ))
         [[ $_level == 1 ]] && [[ $_line_start == 0 ]] && _line_start=$_line_n
-        # [[ "$_val" =~ ${_replacement} ]] && [[ $_level == 1 ]] && _found="true"
         [[ $_level == 0 ]] && [[ $_line_start != 0 ]] && _line_end=$_line_n && echo "$_line_start $_line_end" && break
     done
 }
@@ -273,10 +270,10 @@ _find_xray_config_outbounds() {
             while [ -n "$_line_n" ]; do
                 # found outbounds line num
                 _block_n="$(_find_xray_config_block_multilevel "$_json" "\{" "\}" "$_line_n")"
-                if [ -n "$_block_n" ]; then
+                if [ -n "${_block_n}" ]; then
                     # get the section (dictionary)
-                    _start=$(echo "$_block_n" | cut -d' ' -f1)
-                    _end=$(echo "$_block_n" | cut -d' ' -f2)
+                    _start="${_block_n%% *}"
+                    _end="${_block_n#* }"
                     _line_n=$(($_end + 1))
                     _block="$(echo "$_json" | sed -n "${_start},${_end}p")"
                     if [ -n "$(_find_xray_config_mask "$_block" "\"tag\"\s*:\s*\"${_vps_outbound_tag}\"")" ]; then
@@ -299,6 +296,7 @@ _find_xray_config_outbounds() {
                             _replace_config_url "$_filename" "$_line_protocol" "$_line_address" "$_line_port" "$_line_id" "$_line_encryption" "$_line_flow" "$_line_network" "$_line_security" "$_line_publicKey" "$_line_fingerprint" "$_line_serverName" "$_line_shortId" "$_url"
                             return $?
                         fi
+                        return 0
                     fi
                 else
                     _line_n=""

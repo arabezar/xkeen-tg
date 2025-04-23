@@ -1,6 +1,6 @@
 #!/bin/sh
 
-VERSION="1.0.1" # Версия скрипта
+VERSION="1.0.5" # Версия скрипта
 VERSIONS_XKEEN_SUPPORTED="1.1.3 1.1.3.1 1.1.3.2" # Поддерживаемые версии xkeen (через пробел)
 LATEST_RELEASE_URL="https://github.com/arabezar/xkeen-tg/releases/latest/download/xkeentg.tar"
 DAEMON_NAME="tgbotd"
@@ -16,6 +16,7 @@ CERT_PATH="${ETC_PATH}/tg"
 INITD_PATH="${ETC_PATH}/init.d"
 LIGHTTPD_PATH="${ETC_PATH}/lighttpd/conf.d"
 XKEENTG_PATH="${BIN_PATH}/.xkeentg"
+XRAY_CONFIG_PATH="${ETC_PATH}/xray/configs"
 ENV_FILE="${XKEENTG_PATH}/.env"
 
 [ -f "$ENV_FILE" ] && . "$ENV_FILE"
@@ -142,10 +143,20 @@ get_internal_ip() {
     echo "$_ip_internal"
 }
 
+echo "Поиск настроенного socks5..."
+. "./tools/xray_config_tools.sh"
+PROXY_LOCAL_PORT=$(_find_xray_config "inbounds" "protocol" "socks" "get_proxy_port port")
+if [ $? -eq 1]; then
+    _proxy_line_end="${PROXY_LOCAL_PORT%% *}"
+    _proxy_filename="${PROXY_LOCAL_PORT#* }"    
+    PROXY_LOCAL_PORT="1080"
+fi
+
 # заполнение файла .env
-echo "Сбор параметров для установки..."
 mkdir -p "$XKEENTG_PATH"
 
+echo "Сбор параметров для установки..."
+echo "Поиск настроенного socks5..."
 if [[ ! -f "$CERT_PATH/host.pem" || "$ACTION" == "$ACTION_RENEW" ]]; then
     . "./tools/ip2geo.sh"
     get_geo_info
@@ -164,12 +175,34 @@ if [[ ! -f "$CERT_PATH/host.pem" || "$ACTION" == "$ACTION_RENEW" ]]; then
 fi
 check_config_param "Токен вашего бота Телеграм" "TG_TOKEN"
 check_config_param "Список валидных пользователей (id через пробел)" "TG_CHAT_IDS"
-check_config_param "Порт для webhook бота Телеграм" "TG_WEBHOOK_PORT" "8443"
-check_config_param "Порт для работы бота Телеграм" "TG_LOCAL_PORT" $(($TG_WEBHOOK_PORT + 1))
+check_config_param "Внешний порт для webhook бота Телеграм" "TG_WEBHOOK_PORT" "8443"
+check_config_param "Локальный порт для работы бота Телеграм" "TG_LOCAL_PORT" $(($TG_WEBHOOK_PORT + 1))
+if [ -n "$_proxy_filename" ]; then
+    check_config_param "Локальный порт для работы прокси" "PROXY_LOCAL_PORT" "$PROXY_LOCAL_PORT"
+fi
 check_config_param "Внешний ip-адрес роутера" "ROUTER_IP_EXTERNAL" "$(get_external_ip)"
 check_config_param "Внутренний ip-адрес роутера" "ROUTER_IP_INTERNAL" "$(get_internal_ip)"
 
 chmod ugo-x "$ENV_FILE"
+
+# создание подключения socks5
+if [ -n "$_proxy_filename" ]; then
+    echo "Настройка socks5..."
+    cp -fbp "$_proxy_filename" "$XKEENTG_PATH"
+    _spaces=$(tail -n+$_proxy_line_end "$_proxy_filename" | head -n1 | grep -oE "^[[:space:]]*")
+    _block="${_spaces}},\n${_spaces}{\n${_spaces}    \"tag\": \"socks\",\n${_spaces}    \"port\": $PROXY_LOCAL_PORT,\n${_spaces}    \"protocol\": \"socks\",\n${_spaces}    \"settings\": {\n${_spaces}        \"udp\": true\n${_spaces}    }\n${_spaces}}"
+    sed -i "${_proxy_line_end}s/.*/${_block}/" "$_proxy_filename"
+
+    PROXY_ROUTING=$(_find_xray_config "routing rules" "inboundTag" "socks")
+    if [ $? -eq 1 ]; then
+        _proxy_line_end="${PROXY_ROUTING%% *}"
+        _proxy_filename="${PROXY_ROUTING#* }"
+        cp -fbp "$_proxy_filename" "$XKEENTG_PATH"
+        _spaces=$(tail -n+$_proxy_line_end "$_proxy_filename" | head -n1 | grep -oE "^[[:space:]]*")
+        _block="${_spaces}},\n\n${_spaces}\/\/ Socks5 для проксирования запросов\n${_spaces}{\n${_spaces}    \"inboundTag\": \[\"socks\"\],\n${_spaces}    \"outboundTag\": \"vless-reality\",\n${_spaces}    \"type\": \"field\"\n${_spaces}}"
+        sed -i "${_proxy_line_end}s/.*/${_block}/" "$_proxy_filename"
+    fi
+fi
 
 # обновление Entware
 echo "Обновление Entware..."
