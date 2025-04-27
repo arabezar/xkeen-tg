@@ -59,14 +59,14 @@ _run_ip() {
 }
 
 _is_vpn_active() {
-    [ $(curl -s -x "socks5h://127.0.0.1:1080" \
+    [ $(curl -s -x "socks5h://127.0.0.1:${PROXY_LOCAL_PORT}" \
              -w "%{http_code}" \
                 "https://connectivitycheck.gstatic.com/generate_204") \
         -eq "204" ]
 }
 
 _get_geo_info_ipinfo() {
-    local _proxy=$([ "$1" = "proxy" ] && echo "-x "socks5h://127.0.0.1:1080"")
+    local _proxy=$([ "$1" = "proxy" ] && echo "-x "socks5h://127.0.0.1:${PROXY_LOCAL_PORT}"")
     _ip_info_ip=""
     _ip_info_country_code=""
     _ip_info_country=""
@@ -84,7 +84,7 @@ _get_xkeen_version() {
 
 _get_xkeen_status() {
     if which xkeen &>/dev/null; then
-        $(xkeen -status | grep "не запущен") &>/dev/null && echo "не запущен ❌" || echo "запущен ✅"
+        xkeen -status | grep "не запущен" &>/dev/null && echo "не запущен ❌" || echo "запущен ✅"
     else
         echo "не найден ❌"
     fi

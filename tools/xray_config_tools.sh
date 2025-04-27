@@ -70,8 +70,6 @@ _find_xray_config() {
                 fi
             done
         done
-    else
-        echo "❌ Конфигурация xray не найдена"
     fi
     return 255
 }

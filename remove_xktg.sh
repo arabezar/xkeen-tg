@@ -1,6 +1,6 @@
 #!/bin/sh
 
-VERSION="1.0.1" # Версия скрипта
+VERSION="1.0.6" # Версия скрипта
 DAEMON_NAME="tgbotd"
 DAEMON_START_NAME="S99${DAEMON_NAME}"
 

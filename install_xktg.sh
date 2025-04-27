@@ -1,7 +1,7 @@
 #!/bin/sh
 
-VERSION="1.0.5" # Версия скрипта
-VERSIONS_XKEEN_SUPPORTED="1.1.3 1.1.3.1 1.1.3.2" # Поддерживаемые версии xkeen (через пробел)
+VERSION="1.0.6" # Версия скрипта
+VERSIONS_XKEEN_SUPPORTED="1.1.3 1.1.3.1 1.1.3.2 1.1.3.3 1.1.3.4" # Поддерживаемые версии xkeen (через пробел)
 LATEST_RELEASE_URL="https://github.com/arabezar/xkeen-tg/releases/latest/download/xkeentg.tar"
 DAEMON_NAME="tgbotd"
 DAEMON_START_NAME="S99${DAEMON_NAME}"
@@ -64,6 +64,22 @@ tar -xf xkeentg.tar
 chmod +x services/* tools/* commands/*
 chmod -x www/* LICENSE README.md
 rm -f xkeentg.tar
+
+echo "Поиск настроенного socks5..."
+. "./tools/xray_config_tools.sh"
+PROXY_LOCAL_PORT=$(_find_xray_config "inbounds" "protocol" "socks" "get_proxy_port port")
+case $? in
+    0) ;;
+    1)
+        _proxy_line_end="${PROXY_LOCAL_PORT%% *}"
+        _proxy_filename="${PROXY_LOCAL_PORT#* }"    
+        PROXY_LOCAL_PORT="1080"
+        ;;
+    *)
+        echo "❌ Конфигурация xray не найдена"
+        exit 252
+        ;;
+esac
 
 # Функция проверки наличия и установки значения параметров конфигурации
 check_config_param() {
@@ -143,15 +159,6 @@ get_internal_ip() {
     echo "$_ip_internal"
 }
 
-echo "Поиск настроенного socks5..."
-. "./tools/xray_config_tools.sh"
-PROXY_LOCAL_PORT=$(_find_xray_config "inbounds" "protocol" "socks" "get_proxy_port port")
-if [ $? -eq 1]; then
-    _proxy_line_end="${PROXY_LOCAL_PORT%% *}"
-    _proxy_filename="${PROXY_LOCAL_PORT#* }"    
-    PROXY_LOCAL_PORT="1080"
-fi
-
 # заполнение файла .env
 mkdir -p "$XKEENTG_PATH"
 
@@ -188,19 +195,30 @@ chmod ugo-x "$ENV_FILE"
 # создание подключения socks5
 if [ -n "$_proxy_filename" ]; then
     echo "Настройка socks5..."
-    cp -fbp "$_proxy_filename" "$XKEENTG_PATH"
+    cp -fbp "$_proxy_filename" "${XKEENTG_PATH}/$(basename "$_proxy_filename").bak"
     _spaces=$(tail -n+$_proxy_line_end "$_proxy_filename" | head -n1 | grep -oE "^[[:space:]]*")
     _block="${_spaces}},\n${_spaces}{\n${_spaces}    \"tag\": \"socks\",\n${_spaces}    \"port\": $PROXY_LOCAL_PORT,\n${_spaces}    \"protocol\": \"socks\",\n${_spaces}    \"settings\": {\n${_spaces}        \"udp\": true\n${_spaces}    }\n${_spaces}}"
     sed -i "${_proxy_line_end}s/.*/${_block}/" "$_proxy_filename"
 
-    PROXY_ROUTING=$(_find_xray_config "routing rules" "inboundTag" "socks")
+    _proxy_routing=$(_find_xray_config "routing rules" "inboundTag" "socks")
     if [ $? -eq 1 ]; then
-        _proxy_line_end="${PROXY_ROUTING%% *}"
-        _proxy_filename="${PROXY_ROUTING#* }"
-        cp -fbp "$_proxy_filename" "$XKEENTG_PATH"
+        _proxy_line_end="${_proxy_routing%% *}"
+        _proxy_filename="${_proxy_routing#* }"
+        cp -fbp "$_proxy_filename" "${XKEENTG_PATH}/$(basename "$_proxy_filename").bak"
         _spaces=$(tail -n+$_proxy_line_end "$_proxy_filename" | head -n1 | grep -oE "^[[:space:]]*")
         _block="${_spaces}},\n\n${_spaces}\/\/ Socks5 для проксирования запросов\n${_spaces}{\n${_spaces}    \"inboundTag\": \[\"socks\"\],\n${_spaces}    \"outboundTag\": \"vless-reality\",\n${_spaces}    \"type\": \"field\"\n${_spaces}}"
         sed -i "${_proxy_line_end}s/.*/${_block}/" "$_proxy_filename"
+    fi
+
+    xkeen -restart &>/dev/null
+    if xkeen -status | grep "не запущен" &>/dev/null; then
+        for _filename in ${XKEENTG_PATH}/*.bak; do
+            mv -f "$_filename" "${XRAY_CONFIG_PATH}/$(basename "${_filename%%.bak}")"
+        done
+        echo "❌ Ошибка изменения конфигурации xray, файлы конфигурации восстановлены"
+        exit 251
+    else
+        echo "XKeen перезапущен"
     fi
 fi
 
