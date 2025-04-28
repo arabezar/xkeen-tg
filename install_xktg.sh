@@ -61,8 +61,8 @@ check_xkeen_version
 echo "Загрузка и распаковка xkeen-tg..."
 curl -sLO "$LATEST_RELEASE_URL"
 tar -xf xkeentg.tar
-chmod +x services/* tools/* commands/*
-chmod -x www/* LICENSE README.md
+chmod +x services/* tools/*
+chmod -x commands/* www/* LICENSE README.md
 rm -f xkeentg.tar
 
 echo "Поиск настроенного socks5..."

@@ -220,7 +220,7 @@ root@router:~/xkeentg$ curl -sLO https://raw.githubusercontent.com/arabezar/xkee
 ❓ Удалить команду бота /key ? y(N) y
 ❓ Удалить команду бота /status ? y(N) y
 Удаление регистрации бота в Телеграм...
-✅ Регистрация бота удалена: 
+✅ Регистрация бота удалена: Webhook was deleted
 Удаление бота...
 ❓ Удалить выпущенный сертификат? y(N) y
 ❓ Удалить инструмент netcat? y(N) y
