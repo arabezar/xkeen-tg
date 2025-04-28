@@ -80,17 +80,14 @@ _set_config_value() {
 }
 
 _urlencode() {
-    local str="$1"
-    local i c
-
-    for ((i = 0; i < ${#str}; i++)); do
-        c="${str:$i:1}"
-        case "$c" in
-            [a-zA-Z0-9.~_-]) printf "$c" ;;
-            *) printf '%%%02X' "'$c" ;;
+    local _str="$1"
+    local _c
+    printf '%s' "$_str" | while IFS= read -r -n1 _c; do
+        case "$_c" in
+            [a-zA-Z0-9.~_-]) printf '%s' "$_c" ;;
+            *) printf '%%%02X' "'$_c" ;;
         esac
     done
-    echo
 }
 
 _urldecode() {
