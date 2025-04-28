@@ -24,11 +24,17 @@ _find_xray_config_mask() {
     local _json="$1"
     local _mask="$2"
     local _from="$3"
-    if [ -n "$_from" ]; then
-        echo "$_json" | tail -n "+$_from" | grep -iE "$_mask" -m 1 | xargs | cut -d' ' -f1
-    else
-        echo "$_json" | grep -iE "$_mask" -m 1 | xargs | cut -d' ' -f1
-    fi
+    local _i _ret
+    for _i in $_mask; do
+        [ -n "$_ret" ] && _from=$_ret
+        if [ -n "$_from" ]; then
+            _ret=$(echo "$_json" | tail -n "+$_from" | grep -iE "$_i" -m 1 | xargs | cut -d' ' -f1)
+        else
+            _ret=$(echo "$_json" | grep -iE "$_i" -m 1 | xargs | cut -d' ' -f1)
+        fi
+        [ -z "$_ret" ] && break
+    done
+    echo "$_ret"
 }
 
 _find_xray_config_block_multilevel() {
@@ -37,23 +43,25 @@ _find_xray_config_block_multilevel() {
     local _to="$3"
     local _from_line="$4"
 
-    local _list=$(echo "$_json" | grep -E "{|}" | grep -vE "^[[:space:]]*\/\/" | sed -e "s/[^\{\?\}0-9]/ /g" | xargs)
+    local _list=$(echo "$_json" | grep -E "{|}" | grep -vE "^[[:space:]]*\/\/" 2>/dev/null | sed -e "s/[^\{\?\}0-9]/ /g" | xargs)
+    local _level=0
     local _line_start=0
-    local _val _line_end _level _found
+    local _val _line_end _found
 
     for _val in $_list; do
         [[ "$_val" =~ [[:digit:]]+ ]] && _line_n=$_val
-        (( $_line_n < $_from_line )) && continue
+        [ "$_line_n" -lt "$_from_line" ] && continue
         [[ "$_val" =~ ${_from} ]] && _level=$(( $_level + 1 ))
         [[ "$_val" =~ ${_to} ]] && _level=$(( $_level - 1 ))
-        [[ $_level == 1 ]] && [[ $_line_start == 0 ]] && _line_start=$_line_n
-        [[ $_level == 0 ]] && [[ $_line_start != 0 ]] && _line_end=$_line_n && echo "$_line_start $_line_end" && break
+        [ "$_level" -eq 1 -a "$_line_start" -eq 0 ] && _line_start=$_line_n
+        [ "$_level" -eq 0 -a "$_line_start" -ne 0 ] && _line_end=$_line_n && echo "$_line_start $_line_end" && break
     done
 }
 
 _is_valid_domain() {
-    local domain="$1"
-    [[ "$domain" =~ ^([a-zA-Z0-9](-?[a-zA-Z0-9])*\.)+[a-zA-Z]{2,}$ ]]
+    local _domain="$1"
+    # [[ "$_domain" =~ ^([a-zA-Z0-9](-?[a-zA-Z0-9])*\.)+[a-zA-Z]{2,}$ ]]
+    echo "$_domain" | grep -Eq "^([a-zA-Z0-9]+(-?[a-zA-Z0-9]+)*\.)+[a-zA-Z]{2,}$"
 }
 
 _get_config_value() {

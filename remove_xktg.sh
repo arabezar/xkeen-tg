@@ -50,7 +50,7 @@ if ask_user "❓ Удалить настройки бота (переменны�
 fi
 
 echo "Удаление регистрации бота в Телеграм..."
-_json=$(curl -s "https://api.telegram.org/bot${TG_TOKEN}/deleteWebhook" &>/dev/null)
+_json=$(curl -s "https://api.telegram.org/bot${TG_TOKEN}/deleteWebhook")
 _ok=$(echo "$_json" | jq -r '.ok')
 _descr=$(echo "$_json" | jq -r '.description')
 if [ "$_ok" != "true" ]; then
@@ -66,8 +66,7 @@ rm -f "${BIN_PATH}/xkeentg"
 rm -rf "${LOG_PATH}"
 
 # сертификаты
-_csr_info="/C=${CERT_COUNTRY}/ST=${CERT_STATE}/L=${CERT_CITY}/O=${CERT_ORG}/OU=${CERT_ORG_UNIT}/CN=${DOMAIN}"
-if ask_user "❓ Удалить выпущенный сертификат (${_csr_info})? y(N)" "^[YyДд]$"; then
+if ask_user "❓ Удалить выпущенный сертификат? y(N)" "^[YyДд]$"; then
     rm -rf "${CERT_PATH}"
 fi
 
