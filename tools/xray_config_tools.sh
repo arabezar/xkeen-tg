@@ -23,17 +23,18 @@ _find_xray_config_block_multilevel() {
     local _to="$3"
     local _from_line="$4"
 
-    local _list=$(echo "$_json" | grep -E "{|}" | grep -vE "^[[:space:]]*\/\/" | sed -e "s/[^\{\?\}0-9]/ /g" | xargs)
+    local _list=$(echo "$_json" | grep -E "{|}" | grep -vE "^[[:space:]]*\/\/" 2>/dev/null | sed -e "s/[^\{\?\}0-9]/ /g" | xargs)
+    local _level=0
     local _line_start=0
-    local _val _line_end _level _found
+    local _val _line_end _found
 
     for _val in $_list; do
         [[ "$_val" =~ [[:digit:]]+ ]] && _line_n=$_val
-        (( $_line_n < $_from_line )) && continue
+        [ "$_line_n" -lt "$_from_line" ] && continue
         [[ "$_val" =~ ${_from} ]] && _level=$(( $_level + 1 ))
         [[ "$_val" =~ ${_to} ]] && _level=$(( $_level - 1 ))
-        [[ $_level == 1 ]] && [[ $_line_start == 0 ]] && _line_start=$_line_n
-        [[ $_level == 0 ]] && [[ $_line_start != 0 ]] && _line_end=$_line_n && echo "$_line_start $_line_end" && break
+        [ "$_level" -eq 1 -a "$_line_start" -eq 0 ] && _line_start=$_line_n
+        [ "$_level" -eq 0 -a "$_line_start" -ne 0 ] && _line_end=$_line_n && echo "$_line_start $_line_end" && break
     done
 }
 
