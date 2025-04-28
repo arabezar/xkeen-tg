@@ -163,7 +163,6 @@ get_internal_ip() {
 mkdir -p "$XKEENTG_PATH"
 
 echo "Сбор параметров для установки..."
-echo "Поиск настроенного socks5..."
 if [[ ! -f "$CERT_PATH/host.pem" || "$ACTION" == "$ACTION_RENEW" ]]; then
     . "./tools/ip2geo.sh"
     get_geo_info
@@ -177,8 +176,10 @@ if [[ ! -f "$CERT_PATH/host.pem" || "$ACTION" == "$ACTION_RENEW" ]]; then
     check_config_param "Город" "CERT_CITY" "${_geo_city}"
     check_config_param "Организация" "CERT_ORG" "Home"
     check_config_param "Подразделение" "CERT_ORG_UNIT" "IT"
-    check_config_param "Домен для сертификата" "DOMAIN"
+    check_config_param "Домен для сертификата/бота" "DOMAIN"
     check_config_param "Путь к сертификатам" "CERT_PATH" "$CERT_PATH"
+else
+    check_config_param "Домен для сертификата/бота" "DOMAIN" "$DOMAIN"
 fi
 check_config_param "Токен вашего бота Телеграм" "TG_TOKEN"
 check_config_param "Список валидных пользователей (id через пробел)" "TG_CHAT_IDS"
@@ -195,7 +196,7 @@ chmod ugo-x "$ENV_FILE"
 # создание подключения socks5
 if [ -n "$_proxy_filename" ]; then
     echo "Настройка socks5..."
-    cp -fbp "$_proxy_filename" "${XKEENTG_PATH}/$(basename "$_proxy_filename").bak"
+    cp -fp "$_proxy_filename" "${XKEENTG_PATH}/$(basename "$_proxy_filename").bak"
     _spaces=$(tail -n+$_proxy_line_end "$_proxy_filename" | head -n1 | grep -oE "^[[:space:]]*")
     _block="${_spaces}},\n${_spaces}{\n${_spaces}    \"tag\": \"socks\",\n${_spaces}    \"port\": $PROXY_LOCAL_PORT,\n${_spaces}    \"protocol\": \"socks\",\n${_spaces}    \"settings\": {\n${_spaces}        \"udp\": true\n${_spaces}    }\n${_spaces}}"
     sed -i "${_proxy_line_end}s/.*/${_block}/" "$_proxy_filename"
@@ -204,12 +205,13 @@ if [ -n "$_proxy_filename" ]; then
     if [ $? -eq 1 ]; then
         _proxy_line_end="${_proxy_routing%% *}"
         _proxy_filename="${_proxy_routing#* }"
-        cp -fbp "$_proxy_filename" "${XKEENTG_PATH}/$(basename "$_proxy_filename").bak"
+        cp -fp "$_proxy_filename" "${XKEENTG_PATH}/$(basename "$_proxy_filename").bak"
         _spaces=$(tail -n+$_proxy_line_end "$_proxy_filename" | head -n1 | grep -oE "^[[:space:]]*")
         _block="${_spaces}},\n\n${_spaces}\/\/ Socks5 для проксирования запросов\n${_spaces}{\n${_spaces}    \"inboundTag\": \[\"socks\"\],\n${_spaces}    \"outboundTag\": \"vless-reality\",\n${_spaces}    \"type\": \"field\"\n${_spaces}}"
         sed -i "${_proxy_line_end}s/.*/${_block}/" "$_proxy_filename"
     fi
 
+    echo "Перезапуск XKeen..."
     xkeen -restart &>/dev/null
     if xkeen -status | grep "не запущен" &>/dev/null; then
         for _filename in ${XKEENTG_PATH}/*.bak; do

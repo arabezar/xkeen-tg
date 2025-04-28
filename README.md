@@ -100,7 +100,7 @@ root@router:~/xkeentg$ curl -sLO https://raw.githubusercontent.com/arabezar/xkee
 Город [Moscow] (Enter - подтвердить):
 Организация [Home] (Enter - подтвердить):
 Подразделение [IT] (Enter - подтвердить):
-Домен для сертификата: tg.example.com
+Домен для сертификата/бота: tg.example.com
 Путь к сертификатам [/opt/etc/tg] (Enter - подтвердить):
 Токен вашего бота Телеграм: 1234567890:GK68NKLklJ_sdkjbkjbRJKGbhbsaJH67Bkk
 Список валидных пользователей (id через пробел): 123456789 987654321
@@ -110,6 +110,7 @@ root@router:~/xkeentg$ curl -sLO https://raw.githubusercontent.com/arabezar/xkee
 Внешний ip-адрес роутера [123.45.67.89] (Enter - подтвердить):
 Внутренний ip-адрес роутера [192.168.1.1] (Enter - подтвердить):
 Настройка socks5...
+Перезапуск XKeen...
 XKeen перезапущен
 Обновление Entware...
 Установка необходимых пакетов (openssl-util, lighttpd, netcat)...
