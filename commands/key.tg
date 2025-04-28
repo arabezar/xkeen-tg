@@ -64,6 +64,18 @@ _is_valid_domain() {
     echo "$_domain" | grep -Eq "^([a-zA-Z0-9]+(-?[a-zA-Z0-9]+)*\.)+[a-zA-Z]{2,}$"
 }
 
+_is_valid_id() {
+    local _id="$1"
+    # [[ "$_id" =~ ^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$ ]]
+    echo "$_id" | grep -Eq "^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$"
+}
+
+_is_valid_ip_address() {
+    local _ip_address="$1"
+    # [[ "$_ip_address" =~ ^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$ ]]
+    echo "$_ip_address" | grep -Eq "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$"
+}
+
 _get_config_value() {
     local _filename="$1"
     local _key="$2"
@@ -167,9 +179,9 @@ _replace_config_url() {
     # проверка параметров соединения
     _err_msg=""
     [[ "$_new_protocol" != "vless" ]] && _add_error "Неизвестный протокол: $_new_protocol"
-    [[ ! "$_new_id" =~ ^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$ ]] && _add_error "Неверный UUID: $_new_id"
-    [[ ! "$_new_address" =~ ^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$ ]] && _add_error "Неверный IP: $_new_address"
-    [[ ! "$_new_port" =~ ^[0-9]+$ ]] || (( "$_new_port" < 1 || "$_new_port" > 65535 )) && _add_error "Неверный порт: $_new_port"
+    ! _is_valid_id "$_new_id" && _add_error "Неверный UUID: $_new_id"
+    ! _is_valid_ip_address "$_new_address" && _add_error "Неверный IP: $_new_address"
+    [[ ! "$_new_port" =~ ^[[:digit:]]+$ ]] || [ "$_new_port" -lt 1 -o "$_new_port" -gt 65535 ] && _add_error "Неверный порт: $_new_port"
 
     # считывание текущих параметров из текущей конфигурации
     local _old_protocol="$(_get_config_value "$_filename" "protocol" "$_line_protocol")"
