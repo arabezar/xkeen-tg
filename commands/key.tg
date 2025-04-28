@@ -265,7 +265,8 @@ _find_xray_config_outbounds() {
     local _domain _filename _json _line_n _block_n _start _end _block
     if [ -d "$_xray_config_path" ]; then
         for _filename in ${_xray_config_path}/*.json; do
-            _json="$(cat -n "$_filename")"
+            _json="$(awk '{print NR, $0}' "$_filename")"
+            # _json="$(cat -n "$_filename")"
             _line_n=$(_find_xray_config_mask "$_json" "\"outbounds\"")
             while [ -n "$_line_n" ]; do
                 # found outbounds line num

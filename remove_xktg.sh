@@ -66,7 +66,7 @@ rm -f "${BIN_PATH}/xkeentg"
 rm -rf "${LOG_PATH}"
 
 # сертификаты
-_csr_info="/C=${CERT_COUNTRY}/ST=${CERT_STATE}/L=${CERT_CITY}/O=${CERT_ORG}/OU=${CERT_OU}/CN=${DOMAIN}"
+_csr_info="/C=${CERT_COUNTRY}/ST=${CERT_STATE}/L=${CERT_CITY}/O=${CERT_ORG}/OU=${CERT_ORG_UNIT}/CN=${DOMAIN}"
 if ask_user "❓ Удалить выпущенный сертификат (${_csr_info})? y(N)" "^[YyДд]$"; then
     rm -rf "${CERT_PATH}"
 fi

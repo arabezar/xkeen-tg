@@ -47,7 +47,8 @@ _find_xray_config() {
     local _filename _json _line_n _block_n _start _end _block
     if [ -d "${XRAY_CONFIG_PATH}" ]; then
         for _filename in ${XRAY_CONFIG_PATH}/*.json; do
-            _json="$(cat -n "$_filename")"
+            _json="$(awk '{print NR, $0}' "$_filename")"
+            # _json="$(cat -n "$_filename")"
             _line_n=$(_find_xray_config_mask "$_json" "${_block_name}")
             while [ -n "$_line_n" ]; do
                 # found block line num
