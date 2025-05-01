@@ -1,20 +1,27 @@
 cmd_description="Показать или обновить конфигурацию"
-cmd_parse_mode="MarkdowsV2"
+cmd_parse_mode="MarkdownV2"
 
 cmd_help() {
     local _cmd="$1"
-    # echo "$_cmd [<url>]               - обновить, если указан url, параметры соединения в конфигурации (+ перезагрузка), в ответе - заменённый URL с датой в комменте, иначе - показать url текущей конфигурации"
-    echo "$_cmd [<url>] - показать или обновить (если указан url) параметры соединения в конфигурации (+ перезагрузка, если требуется)"
+    echo -n "$_cmd [<url>]" | block_code_inline
+    echo " - показать или обновить (если указан url) параметры соединения в конфигурации (+ перезагрузка, если требуется)" | escape_str
 }
 
 cmd_run() {
     local _cmd="$1"
     local _url="$2"
 
-    [ -z "$_url" ] && echo -n "Текущий url:" || echo -n "Бывший url:"
+    [ -z "$_url" ] && echo -n "Текущий" || echo -n "Бывший"
     _find_xray_config_outbounds "$_url"
-    [ $? -eq 0 ] && [ -n "$_url" ] && xkeen --restart
-    return $?
+    if [ $? -eq 0 -a -n "$_url" ]; then
+        echo "Конфигурация обновлена, перезапуск прокси\.\.\."
+        xkeen -restart &>/dev/null
+        if xkeen -status | grep "не запущен" &>/dev/null; then
+            echo "❌ Ошибка запуска прокси, восстановите конфигурацию предыдущим ключом или укажите правильный"
+        else
+            echo "✅ Прокси перезапущен"
+        fi
+    fi
 }
 
 _xray_config_path="/opt/etc/xray/configs"
@@ -91,22 +98,6 @@ _set_config_value() {
     sed -i -r "${_line_n}s/^([[:space:]]*\"${_key}\")[[:space:]]*:[[:space:]]*(\")?[^\",]*(\")?(.*)$/\1: \2${_new_value}\3\4/" "${_filename}"
 }
 
-_urlencode() {
-    local _str="$1"
-    local _c
-    printf '%s' "$_str" | while IFS= read -r -n1 _c; do
-        case "$_c" in
-            [a-zA-Z0-9.~_-]) printf '%s' "$_c" ;;
-            *) printf '%%%02X' "'$_c" ;;
-        esac
-    done
-}
-
-_urldecode() {
-    local str="${1//+/ }"
-    printf '%b' "${str//%/\\x}"
-}
-
 _build_config_url() {
     # {protocol}://{id}@{address}:{port}?type={type}&encryption={encryption}&flow={flow}&security={security}&pbk={pbk}&fp={fp}&sni={sni}&sid={sid}=spx={spx}#{comment}
     local _filename="$1"
@@ -124,7 +115,6 @@ _build_config_url() {
     local _line_shortId="${13}"
     local _line_spiderX="${14}"
     local _comment=$(date +"%F")
-    echo -n "<pre>"
     echo -n "$(_get_config_value "$_filename" "protocol" "$_line_protocol")://"
     echo -n "$(_get_config_value "$_filename" "id" "$_line_id")@"
     echo -n "$(_get_config_value "$_filename" "address" "$_line_address"):"
@@ -137,9 +127,8 @@ _build_config_url() {
     echo -n "fp=$(_get_config_value "$_filename" "fingerprint" "$_line_fingerprint")&"
     echo -n "sni=$(_get_config_value "$_filename" "serverName" "$_line_serverName")&"
     echo -n "sid=$(_get_config_value "$_filename" "shortId" "$_line_shortId")&"
-    echo -n "spx=$(_urlencode "$(_get_config_value "$_filename" "spiderX" "$_line_spiderX")")"
-    echo -n "#$(_urlencode "$_comment")"
-    echo -n "</pre>"
+    echo -n "spx=$(_get_config_value "$_filename" "spiderX" "$_line_spiderX" | urlencode)#"
+    echo -n "$_comment" | urlencode
 }
 
 _add_error() {
@@ -195,7 +184,7 @@ _replace_config_url() {
     local _old_fp="$(_get_config_value "$_filename" "fingerprint" "$_line_fingerprint")"
     local _old_sni="$(_get_config_value "$_filename" "serverName" "$_line_serverName")"
     local _old_sid="$(_get_config_value "$_filename" "shortId" "$_line_shortId")"
-    local _old_spx="$(_urlencode "$(_get_config_value "$_filename" "spiderX" "$_line_spiderX")")"
+    local _old_spx="$(_get_config_value "$_filename" "spiderX" "$_line_spiderX")"
     local _old_encryption="$(_get_config_value "$_filename" "encryption" "$_line_encryption")"
     local _old_flow="$(_get_config_value "$_filename" "flow" "$_line_flow")"
 
@@ -224,7 +213,7 @@ _replace_config_url() {
             fp)         _new_fp="$_value" ;;
             sni)        _new_sni="$_value" ;;
             sid)        _new_sid="$_value" ;;
-            spx)        _new_spx="$_value" ;;
+            spx)        _new_spx=$(echo "$_value" | urldecode) ;;
             encryption) _new_encryption="$_value" ;;
             flow)       _new_flow="$_value" ;;
             *)
@@ -261,7 +250,6 @@ _replace_config_url() {
     [ -n "$_err_msg" ] && echo -e "$_err_msg" && return 1
 
     # заменить конфигурацию
-echo
     [[ "$_old_protocol" != "$_new_protocol" ]] && _set_config_value "$_filename" "protocol" "$_line_protocol" "$_new_protocol"
     [[ "$_old_id" != "$_new_id" ]] && _set_config_value "$_filename" "id" "$_line_id" "$_new_id"
     [[ "$_old_address" != "$_new_address" ]] && _set_config_value "$_filename" "address" "$_line_address" "$_new_address"
@@ -272,9 +260,10 @@ echo
     [[ "$_old_fp" != "$_new_fp" ]] && _set_config_value "$_filename" "fingerprint" "$_line_fingerprint" "$_new_fp"
     [[ "$_old_sni" != "$_new_sni" ]] && _set_config_value "$_filename" "serverName" "$_line_serverName" "$_new_sni"
     [[ "$_old_sid" != "$_new_sid" ]] && _set_config_value "$_filename" "shortId" "$_line_shortId" "$_new_sid"
-    [[ "$_old_spx" != "$_new_spx" ]] && _set_config_value "$_filename" "spiderX" "$_line_spiderX" "$(escape_special "$(_urldecode "$_new_spx")")"
+    [[ "$_old_spx" != "$_new_spx" ]] && _set_config_value "$_filename" "spiderX" "$_line_spiderX" "$_new_spx"
     [[ "$_old_encryption" != "$_new_encryption" ]] && _set_config_value "$_filename" "encryption" "$_line_encryption" "$_new_encryption"
     [[ "$_old_flow" != "$_new_flow" ]] && _set_config_value "$_filename" "flow" "$_line_flow" "$_new_flow"
+    return 0
 }
 
 _find_xray_config_outbounds() {
@@ -309,7 +298,7 @@ _find_xray_config_outbounds() {
                         _line_shortId="$(_find_xray_config_mask "$_block" "\"shortId\"\s*:")"
                         _line_spiderX="$(_find_xray_config_mask "$_block" "\"spiderX\"\s*:")"
 
-                        _build_config_url "$_filename" "$_line_protocol" "$_line_address" "$_line_port" "$_line_id" "$_line_encryption" "$_line_flow" "$_line_network" "$_line_security" "$_line_publicKey" "$_line_fingerprint" "$_line_serverName" "$_line_shortId" "$_line_spiderX"
+                        _build_config_url "$_filename" "$_line_protocol" "$_line_address" "$_line_port" "$_line_id" "$_line_encryption" "$_line_flow" "$_line_network" "$_line_security" "$_line_publicKey" "$_line_fingerprint" "$_line_serverName" "$_line_shortId" "$_line_spiderX" | block_code "url"
                         if [ -n "$_url" ]; then
                             _replace_config_url "$_filename" "$_line_protocol" "$_line_address" "$_line_port" "$_line_id" "$_line_encryption" "$_line_flow" "$_line_network" "$_line_security" "$_line_publicKey" "$_line_fingerprint" "$_line_serverName" "$_line_shortId" "$_url"
                             return $?

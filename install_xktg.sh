@@ -1,6 +1,6 @@
 #!/bin/sh
 
-VERSION="1.0.6" # Версия скрипта
+VERSION="0.1.7" # Версия скрипта
 VERSIONS_XKEEN_SUPPORTED="1.1.3 1.1.3.1 1.1.3.2 1.1.3.3 1.1.3.4" # Поддерживаемые версии xkeen (через пробел)
 LATEST_RELEASE_URL="https://github.com/arabezar/xkeen-tg/releases/latest/download/xkeentg.tar"
 DAEMON_NAME="tgbotd"

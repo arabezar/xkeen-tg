@@ -4,20 +4,24 @@
 SCRIPT_PATH=$(cd "$(dirname $0)" && pwd)
 XKEENTG_PATH="${SCRIPT_PATH}/.xkeentg"
 ENV_FILE="${XKEENTG_PATH}/.env"
+TOOLS_FILE="${XKEENTG_PATH}/functions"
+DUMMY_FUNCTIONS_FILE="${XKEENTG_PATH}/tg_null_cmd"
 
 # Загрузка параметров
-if [ -f "$ENV_FILE" ]; then
+if [ -f "$ENV_FILE" -a -f "$TOOLS_FILE" -a -f "$DUMMY_FUNCTIONS_FILE"]; then
     . "$ENV_FILE"
+    . "$TOOLS_FILE"
 else
-    echo "Файл конфигурации ${ENV_FILE} не найден, запуск невозможен"
+    echo "Файл конфигурации ${ENV_FILE} и/или вспомогательные функции не найдены, запуск невозможен"
     exit 255
 fi
 
 # Логи
 LOG_PATH="/opt/var/log/tgbotd"
-LOG_FILE_MSG="${LOG_PATH}/msg.log"
+LOG_FILE_MSG_VALID="${LOG_PATH}/msg.log"
 LOG_FILE_MSG_ILLEGAL="${LOG_PATH}/msg_illegal.log"
 LOG_FILE_MSG_ERROR="${LOG_PATH}/msg_error.log"
+LOG_FILE_DEV_ERROR="${LOG_PATH}/dev_error.log"
 
 # LOG_FILE_DEBUG="${LOG_PATH}/debug.log"
 LOG_FILE_POST="${LOG_PATH}/post.log"
@@ -26,82 +30,6 @@ LOG_FILE_UNKNOWN="${LOG_PATH}/unknown.log"
 
 mkdir -p "$LOG_PATH"
 RESPONSE="HTTP/1.1 200 OK\r\nContent-Length: 0\nContent-Type: text/html\n\n"
-
-log() {
-    local _log_file="$1"
-    local _msg="$2"
-    echo -e "$(date +"%Y-%m-%d %T") - ${_msg}" >> "$_log_file"
-}
-
-escape_html() {
-    sed -e 's/&/\&amp;/g' \
-        -e 's/</\&lt;/g'  \
-        -e 's/>/\&gt;/g'
-}
-
-escape_markdown_v2() {
-    sed -e 's/\\/\\\\/g' \
-        -e 's/-/\\-/g' \
-        -e 's/_/\\_/g' \
-        -e 's/*/\\*/g' \
-        -e 's/\[/\\[/g' \
-        -e 's/]/\\]/g' \
-        -e 's/(/\\(/g' \
-        -e 's/)/\\)/g' \
-        -e 's/~/\\~/g' \
-        -e 's/`/\\`/g' \
-        -e 's/>/\\>/g' \
-        -e 's/#/\\#/g' \
-        -e 's/+/\\+/g' \
-        -e 's/=/\\=/g' \
-        -e 's/|/\\|/g' \
-        -e 's/{/\\{/g' \
-        -e 's/}/\\}/g' \
-        -e 's/\./\\./g' \
-        -e 's/!/\\!/g'
-}
-
-escape_special() {
-    sed -e 's/\//\\\//g'
-}
-
-send_message() {
-    local _msg="$1"
-    local _user_id="$2"
-    [ -z "$_user_id" ] && _user_id="$_chat_id"
-    curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-            -d "chat_id=${_user_id}" \
-            --data-urlencode "text=$_msg" &>/dev/null
-}
-
-send_message_formated() {
-    local _msg="$1"
-    local _parse_mode="$2"
-    local _user_id="$3"
-    [ -z "$_user_id" ] && _user_id="$_chat_id"
-    case "$_parse_mode" in
-        HTML | MarkdownV2 | Markdown)
-            curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-                 -d "parse_mode=${_parse_mode}" \
-                 -d "chat_id=${_user_id}" \
-                 --data-urlencode "text=${_msg}" &>/dev/null
-            ;;
-        *)
-            send_message "$_msg" "$_user_id"
-            ;;
-    esac
-}
-
-build_help() {
-    local _commands _lf _filepath _filename
-    for _filepath in $XKEENTG_PATH/*.tg; do
-        . $_filepath
-        _filename=${_filepath##*/}
-        _commands="${_commands}${_lf}$(cmd_help "/${_filename%.tg}")"
-        _lf="\n"
-    done
-    echo -e "$_commands"
-}
 
 # Бесконечный цикл для обработки входящих сообщений
 while true; do
@@ -155,23 +83,27 @@ while true; do
         # send_message "$_reply"
         continue
     else
-        log "$LOG_FILE_MSG" "${_ip//X-Forwarded-For: /} - $_log_msg"
+        log "$LOG_FILE_MSG_VALID" "${_ip//X-Forwarded-For: /} - $_log_msg"
     fi
 
     # Парсинг текста сообщения - команды
-    . $XKEENTG_PATH/tg_null_cmd
-    if [ -f "${XKEENTG_PATH}${_text}.tg" ]; then
-        . "${XKEENTG_PATH}${_text}.tg"
+    . $DUMMY_FUNCTIONS_FILE
+    _cmd="${_text%% *}"
+    if [ -f "${XKEENTG_PATH}${_cmd}.tg" ]; then
+        . "${XKEENTG_PATH}${_cmd}.tg"
         _reply=$(cmd_run $_text)
     else
-        cmd_parse_mode="HTML"
-        _reply="Команды:<pre>$(build_help | escape_html)</pre>"
-        # _reply="Команды:$(build_help)"
+        cmd_parse_mode="MarkdownV2"
+        _reply=$(echo -e "Команды:\n$(build_help)")
     fi
 
     # Отправляем ответ в Telegram
-    echo -e "\t${_reply//$'\n'/'\n\t'}" >> "$LOG_FILE_MSG"
-    send_message_formated "$_reply" "$cmd_parse_mode"
-    # _answer=$(send_message "$_reply")
-    # echo -e "\t$_answer" >> "$LOG_FILE_MSG" #&>/dev/null
+    echo -e "\t${_reply//$'\n'/'\n\t'}" >> "$LOG_FILE_MSG_VALID"
+    # send_message "$_reply" &>/dev/null
+    _answer=$(send_message "$_reply")
+    # echo -e "\t$_answer" >> "$LOG_FILE_MSG_VALID" #&>/dev/null
+
+    # сообщения для отладки разработчикам плагинов - ошибочные ответы на команды бота
+    _ok=$(echo "$_answer" | jq -r '.ok')
+    [[ "$_ok" != "true" ]] && log "$LOG_FILE_DEV_ERROR" "${_ip//X-Forwarded-For: /} - $_text\n\t$_answer"
 done

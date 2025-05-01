@@ -3,5 +3,6 @@
 /*.tar
 /30
 /configs
-/4help
+/4*
 /t*.sh
+/newtag.sh

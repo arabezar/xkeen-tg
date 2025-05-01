@@ -2,7 +2,7 @@
 # чтобы реальная команда, если функции ниже не заданы в команде, отработала правильно
 
 cmd_description="Описание не задано"
-cmd_parse_mode="" # HTML, MarkdowsV2, Markdown
+cmd_parse_mode="" # HTML, MarkdownV2, Markdown
 
 cmd_help() {
     local _cmd="$1"

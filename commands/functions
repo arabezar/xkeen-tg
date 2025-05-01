@@ -1,0 +1,120 @@
+escape_html() {
+    sed -e 's/&/\&amp;/g' \
+        -e 's/</\&lt;/g'  \
+        -e 's/>/\&gt;/g'
+}
+
+escape_markdown_v2() {
+    sed -e 's/\\/\\\\/g' \
+        -e 's/-/\\-/g' \
+        -e 's/_/\\_/g' \
+        -e 's/*/\\*/g' \
+        -e 's/\[/\\[/g' \
+        -e 's/]/\\]/g' \
+        -e 's/(/\\(/g' \
+        -e 's/)/\\)/g' \
+        -e 's/~/\\~/g' \
+        -e 's/`/\\`/g' \
+        -e 's/>/\\>/g' \
+        -e 's/#/\\#/g' \
+        -e 's/+/\\+/g' \
+        -e 's/=/\\=/g' \
+        -e 's/|/\\|/g' \
+        -e 's/{/\\{/g' \
+        -e 's/}/\\}/g' \
+        -e 's/\./\\./g' \
+        -e 's/!/\\!/g'
+}
+
+escape_special() {
+    sed -e 's/\//\\\//g'
+}
+
+escape_str() {
+    case "$cmd_parse_mode" in
+        Markdown*) escape_markdown_v2 ;;
+        HTML) escape_html ;;
+        *) cat ;;
+    esac
+}
+
+urlencode() {
+    local _c
+    while IFS= read -r -n1 _c; do
+        [ -z "$_c" ] && break
+        case "$_c" in
+            [a-zA-Z0-9.~_-]) printf '%s' "$_c" ;;
+            *) printf '%%%02X' "'$_c" ;;
+        esac
+    done
+}
+
+urldecode() {
+    printf '%b' "$(cat | tr '+' ' ' | sed 's/%/\\x/g')"
+}
+
+block_code() {
+    local _lang="$1"
+    case "$cmd_parse_mode" in
+        Markdown*)
+            echo -n '```'
+            echo "${_lang}"
+            cat
+            echo '```'
+            ;;
+        HTML)
+            echo -n '<pre>'
+            [ -n "$_lang" ] && echo -n "<code class="language-${_lang}">"
+            cat
+            [ -n "$_lang" ] && echo -n "</code>"
+            echo -n '</pre>'
+            ;;
+        *)
+            cat
+            ;;
+    esac
+}
+
+block_code_inline() {
+    case "$cmd_parse_mode" in
+        Markdown*) echo -n '`'; cat; echo -n '`' ;;
+        HTML) echo -n '<code>'; cat; echo -n '</code>' ;;
+        *) cat ;;
+    esac
+}
+
+log() {
+    local _log_file="$1"
+    local _msg="$2"
+    echo -e "$(date +"%Y-%m-%d %T") - ${_msg}" >> "$_log_file"
+}
+
+send_message() {
+    local _msg="$1"
+    local _user_id="$2"
+    [ -z "$_user_id" ] && _user_id="$_chat_id"
+    case "$cmd_parse_mode" in
+        HTML | Markdown*)
+            curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+                 -d "parse_mode=${cmd_parse_mode}" \
+                 -d "chat_id=${_user_id}" \
+                 --data-urlencode "text=${_msg}"
+            ;;
+        *)
+            curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+                 -d "chat_id=${_user_id}" \
+                 --data-urlencode "text=$_msg"
+            ;;
+    esac
+}
+
+build_help() {
+    local _commands _lf _filepath _filename
+    for _filepath in $XKEENTG_PATH/*.tg; do
+        . $_filepath
+        _filename=${_filepath##*/}
+        _commands="${_commands}${_lf}$(cmd_help "/${_filename%.tg}")"
+        _lf="\n"
+    done
+    echo -e "$_commands"
+}

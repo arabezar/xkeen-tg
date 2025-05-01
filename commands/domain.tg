@@ -2,11 +2,8 @@ cmd_description="Добавление и удаление доменов"
 
 cmd_help() {
     local _cmd="$1"
-    # echo "$_cmd check|? <domain>   - проверить статус домена в конфигурационных файлах"
-    # echo "$_cmd add|+ <domain>     - добавить домен в конфигурацию (+ перезагрузка)"
-    # echo "$_cmd del|- <domain>     - закомментировать домен в конфигурации (+ перезагрузка)"
-    # echo "$_cmd comment|# <domain> - закомментировать домен в конфигурации (+ перезагрузка)"
-    echo "/domain [check|?|add|+|del|-|comment|#] <domain> - операции с доменом в конфигурационных файлах - проверка статуса, добавление, удаление, деактивация (+ перезагрузка, если необходимо)"
+    echo -n "/domain [check|?|add|+|del|-|comment|#] <domain>" | block_code_inline
+    echo " - операции с доменом в конфигурационных файлах - проверка статуса, добавление, удаление, деактивация (+ перезагрузка, если необходимо)" | escape_str
 } 
 
 cmd_run() {
@@ -39,7 +36,6 @@ cmd_run() {
                 ;;
         esac
     fi
-    return $?
 }
 
 _xray_config_path="/opt/etc/xray/configs"
@@ -111,19 +107,19 @@ _fix_xray_config_domain_add() {
     local _delta="$5"
     local _line_cur=$(("$_line_n" + "$_delta"))
     local _line
-    for _n in $(seq "$_line_cur" "$_delta" $([[ "$_delta" > 0 ]] && echo "$_last_n" || echo "$_1st_n")); do
+    for _n in $(seq "$_line_cur" "$_delta" $([ "$_delta" -gt 0 ] && echo "$_last_n" || echo "$_1st_n")); do
         _line="$(sed -n "${_n}p" "$_filename")"
         if [[ "$_line" =~ ^[[:space:]]*\".*\" ]]; then
             # найдена значимая строка с доменом
             # проверить запятую в конце текущей строки (+1) или найденной предыдущей (-1)
-            [[ "$_delta" > 0 ]] && _line="$(sed -n "${_line_n}p" "$_filename")" && _line_cur="$_line_n" || _line_cur="$_n"
+            [ "$_delta" -gt 0 ] && _line="$(sed -n "${_line_n}p" "$_filename")" && _line_cur="$_line_n" || _line_cur="$_n"
             ! [[ "$_line" =~ ^[[:space:]]*\".*\"[[:space:]]*, ]] && sed -i "${_line_cur}s/\(\".*\"\)/\1\,/" "$_filename" &>/dev/null
             break
         fi
         _line=""
     done
     # удалить запятую в конце текущей строки (+1)
-    [[ "$_delta" > 0 && -z "$_line" ]] && sed -i "${_line_n}s/\(\".*\"\)\\s*,/\1/" "$_filename" &>/dev/null
+    [ "$_delta" > 0 -a -z "$_line" ] && sed -i "${_line_n}s/\(\".*\"\)\\s*,/\1/" "$_filename" &>/dev/null
 }
 
 _fix_xray_config_domain_del() {
@@ -134,7 +130,7 @@ _fix_xray_config_domain_del() {
     local _delta="$5"
     local _line_cur=$(("$_line_n" + "$_delta"))
     local _line
-    for _n in $(seq "$_line_cur" "$_delta" $([[ "$_delta" > 0 ]] && echo "$_last_n" || echo "$_1st_n")); do
+    for _n in $(seq "$_line_cur" "$_delta" $([ "$_delta" -gt 0 ] && echo "$_last_n" || echo "$_1st_n")); do
         _line="$(sed -n "${_n}p" "$_filename")"
         if [[ "$_line" =~ ^[[:space:]]*\".*\" ]]; then
             # найдена значимая строка с доменом
@@ -289,8 +285,8 @@ _find_xray_config_routing_domains() {
                 _block_n="$(_find_xray_config_block "$_json" "\{" "\}" "$_line_n")"
                 if [ -n "$_block_n" ]; then
                     # get the section (dictionary)
-                    _start=$(echo "$_block_n" | cut -d' ' -f1)
-                    _end=$(echo "$_block_n" | cut -d' ' -f2)
+                    _start=${_block_n%% *}
+                    _end=${_block_n#* }
                     _line_n=$(($_end + 1))
                     _block="$(echo "$_json" | sed -n "${_start},${_end}p")"
                     if [ -n "$(_find_xray_config_mask "$_block" "\"outboundTag\"\s*:\s*\"${_vps_outbound_tag}\"")" ]; then
@@ -300,8 +296,8 @@ _find_xray_config_routing_domains() {
                             _block_n="$(_find_xray_config_block "$_json" "\[" "\]" "$_start")"
                             if [ -n "$_block_n" ]; then
                                 # get the section (array)
-                                _start=$(($(echo "$_block_n" | cut -d' ' -f1) + 1))
-                                _end=$(($(echo "$_block_n" | cut -d' ' -f2) - 1))
+                                _start=$((${_block_n%% *} + 1))
+                                _end=$((${_block_n#* } - 1))
                                 _block="$(echo "$_json" | sed -n "${_start},${_end}p")"
 
                                 # find domain in section
