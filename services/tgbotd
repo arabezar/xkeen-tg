@@ -8,7 +8,7 @@ TOOLS_FILE="${XKEENTG_PATH}/functions"
 DUMMY_FUNCTIONS_FILE="${XKEENTG_PATH}/tg_null_cmd"
 
 # Загрузка параметров
-if [ -f "$ENV_FILE" -a -f "$TOOLS_FILE" -a -f "$DUMMY_FUNCTIONS_FILE"]; then
+if [ -f "$ENV_FILE" -a -f "$TOOLS_FILE" -a -f "$DUMMY_FUNCTIONS_FILE" ]; then
     . "$ENV_FILE"
     . "$TOOLS_FILE"
 else
