@@ -1,7 +1,6 @@
 /.env
 /.vscode
 /*.tar
-/30
 /configs
 /4*
 /t*.sh
