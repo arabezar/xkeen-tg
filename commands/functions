@@ -89,7 +89,27 @@ log() {
     echo -e "$(date +"%Y-%m-%d %T") - ${_msg}" >> "$_log_file"
 }
 
-send_message() {
+restart_xkeen() {
+    local _msg_pre="$1"
+    local _msg_err="$2"
+    local _msg_ok="$3"
+    [ -z "$_msg_pre" ] && _msg_pre="Перезапуск прокси..."
+    [ -z "$_msg_err" ] && _msg_err="❌ Ошибка перезапуска"
+    [ -z "$_msg_ok" ] && _msg_ok="✅ Прокси перезапущен"
+    local _start_time=$(date +%s)
+    local _end_time
+
+    echo "$_msg_pre" | escape_str | send_message
+    xkeen -restart &>/dev/null
+    if xkeen -status | grep "не запущен" &>/dev/null; then
+        echo "$_msg_err" | escape_str | send_message
+    else
+        local _end_time=$(date +%s)
+        echo "$_msg_ok (за $(( $_end_time - $_start_time )) сек)" | escape_str | send_message
+    fi
+}
+
+send_message_tg() {
     local _msg="$1"
     local _user_id="$2"
     [ -z "$_user_id" ] && _user_id="$_chat_id"
@@ -106,15 +126,4 @@ send_message() {
                  --data-urlencode "text=$_msg"
             ;;
     esac
-}
-
-build_help() {
-    local _commands _lf _filepath _filename
-    for _filepath in $XKEENTG_PATH/*.tg; do
-        . $_filepath
-        _filename=${_filepath##*/}
-        _commands="${_commands}${_lf}$(cmd_help "/${_filename%.tg}")"
-        _lf="\n"
-    done
-    echo -e "$_commands"
 }

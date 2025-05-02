@@ -1,4 +1,5 @@
 cmd_description="Добавление и удаление доменов"
+cmd_parse_mode="MarkdownV2"
 
 cmd_help() {
     local _cmd="$1"
@@ -10,31 +11,35 @@ cmd_run() {
     local _cmd="$1"
     local _subcmd="$2"
     local _domain="$3"
+    local _reply
+    local _req_restart
 
-    if [ -z "$_subcmd" ]; then
-        echo "Не реализовано (субкоманд нет)"
-    elif [ "$(echo "$@" | wc -w)" -ne 3 ]; then
-        cmd_help "$_cmd"
+    if [ "$(echo "$@" | wc -w)" -ne 3 ]; then
+        cmd_help
     else
         case "$_subcmd" in
             ch* | \?)
                 _find_xray_config_routing_domains "_domain_check_status" "$_domain"
                 ;;
             a* | \+)
-                _find_xray_config_routing_domains "_domain_add" "$_domain"
-                [ $? -eq 0 ] && xkeen --restart
+                _reply="$(_find_xray_config_routing_domains "_domain_add" "$_domain")"
+                [ $? -eq 0 ] && _req_restart="true"
                 ;;
             d* | \-)
-                _find_xray_config_routing_domains "_domain_del" "$_domain"
-                [ $? -eq 0 ] && xkeen --restart
+                _reply="$(_find_xray_config_routing_domains "_domain_del" "$_domain")"
+                [ $? -eq 0 ] && _req_restart="true"
                 ;;
             co* | \#)
-                _find_xray_config_routing_domains "_domain_comment" "$_domain"
-                [ $? -eq 0 ] && xkeen --restart
+                _reply="$(_find_xray_config_routing_domains "_domain_comment" "$_domain")"
+                [ $? -eq 0 ] && _req_restart="true"
                 ;;
-            *) cmd_help "$_cmd"
+            *)
+                cmd_help
                 ;;
         esac
+
+        send_message "$_reply"
+        [[ "$_req_restart" == "true" ]] && restart_xkeen
     fi
 }
 
@@ -105,7 +110,7 @@ _fix_xray_config_domain_add() {
     local _line_n="$3"
     local _last_n="$4"
     local _delta="$5"
-    local _line_cur=$(("$_line_n" + "$_delta"))
+    local _line_cur=$(($_line_n + $_delta))
     local _line
     for _n in $(seq "$_line_cur" "$_delta" $([ "$_delta" -gt 0 ] && echo "$_last_n" || echo "$_1st_n")); do
         _line="$(sed -n "${_n}p" "$_filename")"
@@ -119,7 +124,7 @@ _fix_xray_config_domain_add() {
         _line=""
     done
     # удалить запятую в конце текущей строки (+1)
-    [ "$_delta" > 0 -a -z "$_line" ] && sed -i "${_line_n}s/\(\".*\"\)\\s*,/\1/" "$_filename" &>/dev/null
+    [ "$_delta" -gt 0 -a -z "$_line" ] && sed -i "${_line_n}s/\(\".*\"\)\\s*,/\1/" "$_filename" &>/dev/null
 }
 
 _fix_xray_config_domain_del() {
@@ -128,7 +133,7 @@ _fix_xray_config_domain_del() {
     local _line_n="$3"
     local _last_n="$4"
     local _delta="$5"
-    local _line_cur=$(("$_line_n" + "$_delta"))
+    local _line_cur=$(($_line_n + $_delta))
     local _line
     for _n in $(seq "$_line_cur" "$_delta" $([ "$_delta" -gt 0 ] && echo "$_last_n" || echo "$_1st_n")); do
         _line="$(sed -n "${_n}p" "$_filename")"
@@ -168,7 +173,7 @@ _domain_add() {
         1)
             _char=$(sed -n "${_line_n}p" "$_filename" | grep -oE "\S" | head -n 1)
             case "$_char" in
-                /*)
+                /)
                     # раскомментировать строку
                     sed -i "${_line_n}s|//||" "$_filename" &>/dev/null
                     # если есть предыдующие значимые строки, добавить в конец предыдущей значимой строки запятую, если требуется
@@ -178,7 +183,7 @@ _domain_add() {
                     echo "Домен раскомментирован"
                     return 0
                     ;;
-                \"*)
+                \")
                     echo "Домен уже существует"
                     ;;
                 *)
@@ -208,10 +213,10 @@ _domain_comment() {
         1)
             _char=$(sed -n "${_line_n}p" "$_filename" | grep -oE "\S" | head -n 1)
             case "$_char" in
-                /*)
+                /)
                     echo "Домен уже закомментирован"
                     ;;
-                \"*)
+                \")
                     # если в конце текущей строки нет запятой, то её не должно быть и у предыдущей найденной (-1)
                     _fix_xray_config_domain_del "$_filename" "$_1st_n" "$_line_n" "$_last_n" -1
                     # закомментировать строку
@@ -301,15 +306,15 @@ _find_xray_config_routing_domains() {
                                 _block="$(echo "$_json" | sed -n "${_start},${_end}p")"
 
                                 # find domain in section
-                                _found="$(echo "$_block" | grep -F "\"$_domain\"")"
-                                if [ -n "$_found" ]; then
-                                    _found_cnt="$(echo "$_found" | wc -l)"
-                                    _found_n="$(echo $_found | xargs | cut -d' ' -f1)"
+                                _found_lines="$(echo "$_block" | grep -F "\"$_domain\"")"
+                                if [ -n "$_found_lines" ]; then
+                                    _found_cnt="$(echo "$_found_lines" | wc -l)"
+                                    _found_n=${_found_lines%% *}
                                 else
                                     _found_cnt="0"
                                 fi
                                 $_action "$_found_cnt" "$_domain" "$_filename" "$_start" "$_found_n" "$_end"
-                                return $?
+                                return "$?"
                             fi
                         fi
                     fi

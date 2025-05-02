@@ -7,6 +7,8 @@ cmd_help() {
 }
 
 cmd_run() {
+    echo "Сбор информации..." | escape_str | send_message
+
     if [ -z "$2" ]; then
         _run_uptime
         _run_xkeen
@@ -17,11 +19,15 @@ cmd_run() {
         local _param
         for _param in $@; do
             case "$_param" in
+                $1) ;;
                 u*)     _run_uptime     ;;
                 xk*)    _run_xkeen      ;;
                 xr*)    _run_xray       ;;
                 d*)     _run_db         ;;
                 i*)     _run_ip         ;;
+                *)
+                    echo "Неизвестная команда: $_param"
+                    ;;
             esac
         done
     fi
@@ -29,7 +35,10 @@ cmd_run() {
 
 _run_uptime() {
     local _uptime=$(uptime)
-    echo "⚡ Роутер работает: $(echo "$_uptime" | xargs | cut -d' ' -f3)"
+    local _uptime_main="$(echo "$_uptime" | xargs | cut -d' ' -f3)"
+    local _units
+    [[ "$_uptime_main" =~ ^[[:digit:]]*$ ]] && _units=" (дней)"
+    echo "⚡ Роутер работает${_units}: ${_uptime_main}"
     echo "💡 Текущая загрузка: $(echo "$_uptime" | awk -F'load average: ' '{print $2}')"
 }
 

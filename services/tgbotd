@@ -21,9 +21,7 @@ LOG_PATH="/opt/var/log/tgbotd"
 LOG_FILE_MSG_VALID="${LOG_PATH}/msg.log"
 LOG_FILE_MSG_ILLEGAL="${LOG_PATH}/msg_illegal.log"
 LOG_FILE_MSG_ERROR="${LOG_PATH}/msg_error.log"
-LOG_FILE_DEV_ERROR="${LOG_PATH}/dev_error.log"
-
-# LOG_FILE_DEBUG="${LOG_PATH}/debug.log"
+LOG_FILE_MSG_SKIP="${LOG_PATH}/msg_skip.log"
 LOG_FILE_POST="${LOG_PATH}/post.log"
 LOG_FILE_GET="${LOG_PATH}/get.log"
 LOG_FILE_UNKNOWN="${LOG_PATH}/unknown.log"
@@ -31,11 +29,33 @@ LOG_FILE_UNKNOWN="${LOG_PATH}/unknown.log"
 mkdir -p "$LOG_PATH"
 RESPONSE="HTTP/1.1 200 OK\r\nContent-Length: 0\nContent-Type: text/html\n\n"
 
+build_help() {
+    local _commands _lf _filepath _filename
+    for _filepath in $XKEENTG_PATH/*.tg; do
+        . $_filepath
+        _filename=${_filepath##*/}
+        _commands="${_commands}${_lf}$(cmd_help "/${_filename%.tg}")"
+        _lf="\n"
+    done
+    echo -e "$_commands"
+}
+
+send_message() {
+    local _msg="$1"
+    [ -z "$_msg" ] && _msg=$(cat)
+    if [ -n "$_msg" ]; then
+        echo -e "\t${_msg//$'\n'/'\n\t'}" >> "$LOG_FILE_MSG_VALID"
+        local _answer=$(send_message_tg "$_msg")
+        # сообщения для отладки разработчикам плагинов - ошибочные ответы на команды бота
+        [[ "$(echo "$_answer" | jq -r '.ok')" != "true" ]] && echo -e "\t\t$_answer" >> "$LOG_FILE_MSG_VALID"
+    fi
+}
+
 # Бесконечный цикл для обработки входящих сообщений
 while true; do
     _request=$(echo -e "$RESPONSE" | nc -l -p $TG_LOCAL_PORT )
     if ! echo "$_request" | head -n1 | grep -qE "^[a-zA-Z]+\s+/${TG_TOKEN}"; then
-        # binary file
+        # binary file - иногда попадается, следим...
         echo "$request" > "${LOG_PATH}/binary-$(date +"%Y%m%d-%H%M%S").log"
         sleep 2
         continue
@@ -44,19 +64,19 @@ while true; do
     _ip=$(echo "$_request" | grep -i 'X-Forwarded-For: ' | tr -d '\r')
     _ua=$(echo "$_request" | grep -i 'user-agent: ' | tr -d '\r')
     if echo "$_request" | head -n1 | grep -qiE "^GET\s+"; then
-        # get
+        # get - Телега шлёт только POST
         log "$LOG_FILE_GET" "${_ip//X-Forwarded-For: /} ${_ua//user-agent: /}"
         continue
     fi
     if ! echo "$_request" | head -n1 | grep -qE "^POST\s+"; then
-        # not post
+        # not post - Телега шлёт только POST
         log "$LOG_FILE_UNKNOWN" "${_ip//X-Forwarded-For: /} ${_ua//user-agent: /}"
         continue
     fi
 
     _json=$(echo "$_request" | sed "/{/!d")
     if [ -z "$_json" ]; then
-        # post without json
+        # post without json - Телега шлёт только json
         log "$LOG_FILE_POST" "${_ip//X-Forwarded-For: /} ${_ua//user-agent: /}"
         continue
     fi
@@ -69,10 +89,17 @@ while true; do
         continue
     fi
 
-    _chat_id=$(echo "$_json" | jq -r '.message.chat.id')
-    _text=$(echo "$_json" | jq -r '.message.text')
+    _msg_type=$(echo $_json | jq -r 'to_entries[1].key')
+    if [ -z "$_msg_type" ] || [[ "$_msg_type" != "message" ]]; then
+        # обрабатываем только обычные сообщения, никаких сервисных, редактирований и т.д.
+        log "$LOG_FILE_MSG_SKIP" "${_ip//X-Forwarded-For: /} - Тип сообщения не поддерживается - $_log_msg"
+        continue
+    fi
+
+    _chat_id=$(echo "$_json" | jq -r ".${_msg_type}.chat.id")
+    _text=$(echo "$_json" | jq -r ".${_msg_type}.text")
     if [[ "$_chat_id" == "null" ]]; then
-        log "$LOG_FILE_MSG_ERROR" "${_ip//X-Forwarded-For: /} - Пользователь не найден\n${_request}"
+        log "$LOG_FILE_MSG_ERROR" "${_ip//X-Forwarded-For: /} - Пользователь не найден - $_log_msg"
         continue
     fi
 
@@ -91,19 +118,9 @@ while true; do
     _cmd="${_text%% *}"
     if [ -f "${XKEENTG_PATH}${_cmd}.tg" ]; then
         . "${XKEENTG_PATH}${_cmd}.tg"
-        _reply=$(cmd_run $_text)
+        cmd_run $_text | send_message
     else
         cmd_parse_mode="MarkdownV2"
-        _reply=$(echo -e "Команды:\n$(build_help)")
+        echo -e "Команды:\n$(build_help)" | send_message
     fi
-
-    # Отправляем ответ в Telegram
-    echo -e "\t${_reply//$'\n'/'\n\t'}" >> "$LOG_FILE_MSG_VALID"
-    # send_message "$_reply" &>/dev/null
-    _answer=$(send_message "$_reply")
-    # echo -e "\t$_answer" >> "$LOG_FILE_MSG_VALID" #&>/dev/null
-
-    # сообщения для отладки разработчикам плагинов - ошибочные ответы на команды бота
-    _ok=$(echo "$_answer" | jq -r '.ok')
-    [[ "$_ok" != "true" ]] && log "$LOG_FILE_DEV_ERROR" "${_ip//X-Forwarded-For: /} - $_text\n\t$_answer"
 done

@@ -10,18 +10,17 @@ cmd_help() {
 cmd_run() {
     local _cmd="$1"
     local _url="$2"
+    local _reply
+    local _req_restart
 
-    [ -z "$_url" ] && echo -n "Текущий" || echo -n "Бывший"
-    _find_xray_config_outbounds "$_url"
-    if [ $? -eq 0 -a -n "$_url" ]; then
-        echo "Конфигурация обновлена, перезапуск прокси\.\.\."
-        xkeen -restart &>/dev/null
-        if xkeen -status | grep "не запущен" &>/dev/null; then
-            echo "❌ Ошибка запуска прокси, восстановите конфигурацию предыдущим ключом или укажите правильный"
-        else
-            echo "✅ Прокси перезапущен"
-        fi
-    fi
+    _reply="$([ -z "$_url" ] && echo -n "Текущий" || echo -n "Бывший")"
+    _reply="${_reply}$(_find_xray_config_outbounds "$_url")"
+    [ $? -eq 0 -a -n "$_url" ] && _req_restart="true"
+    send_message "$_reply"
+    [[ "$_req_restart" == "true" ]] && \
+        restart_xkeen \
+            "Конфигурация обновлена, перезапуск прокси..." \
+            "❌ Ошибка запуска прокси, восстановите конфигурацию предыдущим ключом или укажите правильный"
 }
 
 _xray_config_path="/opt/etc/xray/configs"
@@ -245,7 +244,7 @@ _replace_config_url() {
     [[ "$_old_sid" == "$_new_sid" ]] && \
     [[ "$_old_spx" == "$_new_spx" ]] && \
     [[ "$_old_encryption" == "$_new_encryption" ]] && \
-    [[ "$_old_flow" == "$_new_flow" ]] && _add_error "Параметры не измелись"
+    [[ "$_old_flow" == "$_new_flow" ]] && _add_error "Параметры не изменились"
 
     [ -n "$_err_msg" ] && echo -e "$_err_msg" && return 1
 
