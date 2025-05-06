@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/github/license/arabezar/xkeen-tg?style=flat&color=orange)](LICENSE)
 [![YooMoney](https://img.shields.io/badge/donate-YooMoney-8037fd.svg?style=flat)](https://yoomoney.ru/to/410013875426872)
 [![CloudTips](https://img.shields.io/badge/donate-CloudTips-598bd7.svg?style=flat)](https://pay.cloudtips.ru/p/6352cb45)
-[![TONCoin](https://img.shields.io/badge/donate-TON-blue?logo=TON)](./images/tips-TON.jpg)
+[![TONCoin](https://img.shields.io/badge/donate-TON-blue?logo=TON)](https://github.com/arabezar/xkeen-tg/blob/main/images/tips_TON.jpg)
 [![Telegram](https://img.shields.io/badge/Telegram-Join-blue.svg?logo=telegram)](https://t.me/xkeen_tg)
 
 Инструмент (ограниченного) управления маршрутизатором и конфигурацией утилиты `XKeen` для роутеров через Telegram бота. Написан исключительно на `shell` (`bash`), но, разумеется, использует пакеты `Entware`. Весь код полностью открыт и доступен для изучения. Команды бота выполнены в виде плагинов
