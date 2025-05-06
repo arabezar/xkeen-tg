@@ -186,7 +186,7 @@ check_config_param "Список валидных пользователей (id
 check_config_param "Внешний порт для webhook бота Телеграм" "TG_WEBHOOK_PORT" "8443"
 check_config_param "Локальный порт для работы бота Телеграм" "TG_LOCAL_PORT" $(($TG_WEBHOOK_PORT + 1))
 if [ -n "$_proxy_filename" ]; then
-    check_config_param "Локальный порт для работы прокси" "PROXY_LOCAL_PORT" "$PROXY_LOCAL_PORT"
+    check_config_param "Локальный порт для работы socks5" "PROXY_LOCAL_PORT" "$PROXY_LOCAL_PORT"
 fi
 check_config_param "Внешний ip-адрес роутера" "ROUTER_IP_EXTERNAL" "$(get_external_ip)"
 check_config_param "Внутренний ip-адрес роутера" "ROUTER_IP_INTERNAL" "$(get_internal_ip)"
@@ -284,10 +284,15 @@ server.bind = "0.0.0.0"
 ssl.engine = "enable"
 ssl.pemfile = "${CERT_PATH}/host.pem"
 
+# mod-accesslog
+accesslog.filename = "/opt/var/log/lighttpd/access.log"
+accesslog.format = "%h %V %t \"%r\" %>s %b \"%{User-Agent}i\""
+
 # mod-proxy, mod-rewrite
 \$HTTP["host"] == "${DOMAIN}" {
     \$HTTP["url"] =~ "^/${TG_TOKEN}$" {
         proxy.server = ( "" => ( ( "host" => "127.0.0.1", "port" => ${TG_LOCAL_PORT} ) ) )
+        accesslog.filename = "/dev/null"
     } else {
         \$HTTP["url"] !~ "^/(style\.css|favicon\.ico)$" {
             url.rewrite-once = ( ".*" => "/none.html" )
@@ -301,11 +306,8 @@ ssl.pemfile = "${CERT_PATH}/host.pem"
     } else \$HTTP["url"] !~ "^/(style\.css|favicon\.ico)$" {
         url.rewrite-if-not-file = ( ".*" => "/none.html" )
     }
+    accesslog.filename = "/dev/null"
 }
-
-# mod-accesslog
-accesslog.filename = "/opt/var/log/lighttpd/access.log"
-accesslog.format = "%h %V %t \"%r\" %>s %b \"%{User-Agent}i\""
 EOF
 
 # https://redmine.lighttpd.net/projects/lighttpd/wiki/Mod_accesslog

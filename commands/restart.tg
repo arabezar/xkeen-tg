@@ -1,0 +1,12 @@
+cmd_description="Перезапуск прокси"
+cmd_parse_mode="MarkdownV2"
+
+cmd_help() {
+    local _cmd="$1"
+    echo -n "$_cmd" | block_code_inline
+    echo " - перезагрузка прокси" | escape_str
+} 
+
+cmd_run() {
+    restart_xkeen
+}
