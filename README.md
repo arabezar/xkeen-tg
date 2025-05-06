@@ -345,4 +345,4 @@ root@router:~/xkeentg$
 
 ---
 
-Нравится проект? Поддержи автора, купи ему :beers: или :coffee: ([тынц](https://yoomoney.ru/to/410013875426872) или [тынц](https://pay.cloudtips.ru/p/6352cb45))
+Нравится проект? Поддержи автора, купи ему :beers: или :coffee: ([тынц](https://yoomoney.ru/to/410013875426872), [тынц](https://pay.cloudtips.ru/p/6352cb45) или [тынц](https://github.com/arabezar/xkeen-tg/blob/main/images/tips_TON.jpg))
